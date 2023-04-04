@@ -1,0 +1,31 @@
+---
+version: '3.3'
+
+networks:
+  traefik:
+    name: traefik
+
+services:
+  authelia:
+    image: ghcr.io/authelia/authelia:4.37
+    container_name: authelia
+    volumes:
+      - ${nfsvols}/authelia:/config
+    networks: [traefik]
+    user: ${NFS_PUID}:${NFS_PGID}
+    labels:
+      traefik.enable: true
+      traefik.http.routers.authelia.tls: true
+      traefik.http.middlewares.authelia.forwardauth.address: http://authelia:9091/api/authz/forward-auth?rd=https://${HOSTNAME.${DOMAIN}:9091/
+      traefik.http.middlewares.authelia.forwardauth.trustForwardHeader: true
+      traefik.http.middlewares.authelia.forwardauth.authResponseHeaders: Remote-User,Remote-Groups,Remote-Name,Remote-Email
+      # add this to any service that's secured by Authelia
+      # traefik.http.routers.SERVICE.middlewares: authelia@docker
+    expose:
+      - 9091
+    restart: unless-stopped
+    healthcheck:
+      ## In production the healthcheck section should be commented.
+      disable: true
+    environment:
+      - TZ=${TZ}

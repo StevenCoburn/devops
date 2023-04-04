@@ -1,0 +1,41 @@
+version: '3.8'
+
+networks:
+  internet-bridge:
+    external: true
+    name: internet-bridge
+  traefik-internal:
+    external: true
+    name: traefik-internal
+
+services:
+  unifi:
+    image: linuxserver/unifi-controller:latest
+    container_name: unifi-controller
+    mem_limit: 3192m
+    restart: unless-stopped
+    privileged: false
+    security_opt: [no-new-privileges:true]
+    volumes:
+      - ${nfsvols}/UniFi-Data:/config
+    networks: [internet-bridge, traefik-internal]
+    ports:
+     - 3478:3478/udp
+     - 8080:8080
+    environment:
+      - PUID=${NFS_PUID}
+      - PGID=${NFS_PGID}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    labels:
+      traefik.enable: true
+      traefik.http.routers.unifi.tls: true
+      traefik.http.routers.unifi.service: unifi
+      traefik.http.services.unifi.loadbalancer.server.port: 8443
+      traefik.http.services.unifi.loadbalancer.server.scheme: https
+      # Default rate limiting blocks unifi, it's quite noisy
+      traefik.http.routers.unifi.middlewares: unifiHeaders@file
+      traefik.http.routers.unifi.rule: "Host(`unifi.${DOMAIN}`) || Host(`unifi`)"

@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+
+  Homepage:
+    image: httpd:latest
+    container_name: Homepage
+    restart: always
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - traefik
+    volumes:
+      - ./data:/usr/local/apache2/htdocs
+    environment:
+      TZ: ${TZ}
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.coburnhome.entryPoints=websecure
+      - traefik.http.routers.coburnhome.rule=Host(`${DOMAIN}`)
+      - traefik.http.routers.coburnhome.middlewares=secure-headers@file,rateLimit@file
+      - traefik.http.routers.coburnhome.tls=true
+      - traefik.http.routers.coburnhome.tls.certResolver=cloudflare
+      - traefik.http.routers.coburnhome.service=coburnhome
+      - traefik.http.services.coburnhome.LoadBalancer.server.Port=80
+
+networks:
+  traefik:
+    name: traefik
+    external: true

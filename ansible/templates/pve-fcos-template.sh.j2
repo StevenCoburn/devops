@@ -1,0 +1,52 @@
+#!/bin/bash
+
+# Notes:
+# pvesh usage /nodes/Leviathan/qemu/111/config -v
+# Updating the ignition file is a manual process (stored in Git repo)
+# The ignition file is a snippet and stored in the snippets share
+# The PVE scripts (like this one) are stored in /etc/cron*
+# Another (broken) way to find next VM ID is with pvesh get /cluster/nextid | tr -d '"'
+
+# Variables
+PVE_NODE={{ pve_primary_server }}
+VM_ID=1000
+IGN={{ pve_ignition_path }}
+DATASET_LOC=rpool/data
+DATASET_NAME=VM-Local
+
+# Install jq if needed
+if ! [ -n "$(dpkg -l | awk "/^ii  jq/")" ]; then apt-get install -y jq; fi
+# Get latest CoreOS from stream data
+Stream_URL=https://builds.coreos.fedoraproject.org/streams/stable.json
+FCOS_VERSION=$(curl -s ${Stream_URL} | jq -r .architectures.x86_64.artifacts.qemu.release)
+FCOS_URL=$(curl -s ${Stream_URL} | jq -r '.architectures.x86_64.artifacts.qemu.formats."qcow2.xz".disk.location')
+curl -s ${FCOS_URL} -o coreOS-${FCOS_VERSION}.qcow2.xz
+unxz coreOS-${FCOS_VERSION}.qcow2.xz
+
+# Check for open VM_ID
+while $(jq '.ids | has("'"${VM_ID}"'")' /etc/pve/.vmlist);
+do
+  echo "VM $((VM_ID++)) is taken, incrementing..."
+done
+
+# Create VM
+pvesh create /nodes/${PVE_NODE}/qemu \
+  -vmid ${VM_ID} -name FCOS-${FCOS_VERSION} \
+  -sockets 1 -cores 4 -memory 8192 -ostype l26 \
+  -balloon 0 -bios ovmf -machine q35 -numa 0 -agent 1 \
+  -scsihw virtio-scsi-pci -scsi0 ${DATASET_NAME}:50 \
+  -net0 virtio,bridge=vmbr1
+# Fill VM Disk with CoreOS QCOW image
+qemu-img convert -f qcow2 -O raw coreOS-${FCOS_VERSION}.qcow2 /dev/zvol/${DATASET_LOC}/vm-${VM_ID}-disk-0
+# Set firmware flag to ign file
+pvesh create /nodes/${PVE_NODE}/qemu/${VM_ID}/config/ --args "-fw_cfg name=opt/com.coreos/config,file=${IGN}"
+# Convert to template
+pvesh create /nodes/${PVE_NODE}/qemu/${VM_ID}/config/ --template 1
+zfs rename ${DATASET_LOC}/vm-${VM_ID}-disk-0 ${DATASET_LOC}/base-${VM_ID}-disk-0
+pvesh set /nodes/${PVE_NODE}/qemu/${VM_ID}/config/ -scsi0 ${DATASET_NAME}:base-${VM_ID}-disk-0
+if [[ $(pvesh get /nodes/${PVE_NODE}/qemu/${VM_ID}/config/ | grep unused0) ]]; then
+  qm set ${VM_ID} --delete unused0
+fi
+zfs snapshot ${DATASET_LOC}/base-${VM_ID}-disk-0@__base__
+# Remove qcow2 image as it's no longer needed
+rm coreOS-${FCOS_VERSION}.qcow2

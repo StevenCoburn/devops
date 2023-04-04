@@ -1,0 +1,28 @@
+version: '3.8'
+
+volumes:
+  portainer:
+    name: portainer
+
+networks:
+  traefik-internal:
+    external: true
+    name: traefik-internal
+
+services:
+  containers:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    restart: always
+    privileged: false
+    security_opt: [no-new-privileges:true]
+    networks: [traefik-internal]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - portainer:/data
+    labels:
+      traefik.enable: true
+      traefik.http.routers.portainer.tls: true
+      traefik.http.routers.portainer.service: portainer
+      traefik.http.services.portainer.loadbalancer.server.port: 9000
+      traefik.http.routers.portainer.middlewares: secure-headers@file,rateLimit@file

@@ -1,0 +1,17 @@
+version: '3.8'
+services:
+  discord-smtp-relay:
+    container_name: discord-smtp-relay
+    image: discord-smtp-relay:latest
+    build: ./
+    network_mode: bridge
+    restart: unless-stopped
+    environment:
+      PYTHONUNBUFFERED: 1
+      WEBHOOK_URL: ${DISCORD_INFO_HOOK}
+      # SMTP_USERNAME: #optional
+      # SMTP_PASSWORD: #optional
+      # TLS_CERT_CHAIN: #optional
+      # TLS_KEY: #optional
+    ports:
+      - 8025:8025

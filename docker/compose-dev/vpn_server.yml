@@ -1,0 +1,19 @@
+version: '2'
+
+services:
+  VPN_Server:
+    image: hwdsl2/ipsec-vpn-server
+    container_name: VPN_Server
+    network_mode: bridge
+    restart: always
+    privileged: true
+    environment:
+      - TZ=${TZ}
+      - VPN_IPSEC_PSK=${VPN_IPSEC_PSK}
+      - VPN_USER=${VPN_USER}
+      - VPN_PASSWORD=${VPN_PASSWORD}
+      - VPN_DNS_SRV1=${VPN_DNS_SRV1}
+      - VPN_DNS_SRV2=${VPN_DNS_SRV2}
+    ports:
+      - 500:500/udp
+      - 4500:4500/udp

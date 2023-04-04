@@ -1,0 +1,39 @@
+#This is based on http://tonylawrence.com/posts/unix/synology/free-your-synology-ports/
+version: '2'
+ 
+services:
+
+  PiHole:
+    image: pihole/pihole:latest
+    container_name: PiHole
+    hostname: pihole
+    restart: always
+    privileged: true
+    networks:
+      macvlanXXX:
+        ipv4_address: x.x.x.x
+    dns:
+      - 127.0.0.1
+      - x.x.x.x # the upstream dns (pfsense) IP
+    environment:
+      TZ: ${TZ}
+      ServerIP: x.x.x.x
+      VIRTUAL_HOST: pihole.mgmt
+      WEBPASSWORD: tester
+      DNS1: 1.1.1.1
+      DNS2: 1.0.0.1
+    cap_add:
+      - NET_ADMIN
+    volumes:
+      - PiHole-Data:/etc/pihole/
+      - PiHole-dnsmasq:/etc/dnsmasq.d/
+    labels:
+      - traefik.enable=false
+
+networks:
+  macvlanXXX:
+    external: true
+
+volumes:
+  PiHole-Data:
+  PiHole-dnsmasq:

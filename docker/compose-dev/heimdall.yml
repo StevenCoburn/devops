@@ -1,0 +1,21 @@
+version: "2"
+
+services:
+  
+  heimdall:
+    image: linuxserver/heimdall
+    container_name: Heimdall
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - Heimdall:/config
+    ports:
+      - 8090:80
+      - 8091:443
+    restart: unless-stopped
+
+volumes:
+  Heimdall:
+    external: true

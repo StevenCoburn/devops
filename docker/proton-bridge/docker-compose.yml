@@ -1,0 +1,24 @@
+# https://github.com/shenxn/protonmail-bridge-docker
+version: '3.8'
+
+services:
+  proton-bridge:
+    image: shenxn/protonmail-bridge:latest
+    container_name: proton-bridge
+    # build:
+    #  context: ./build
+    #  dockerfile: Dockerfile
+    network_mode: bridge
+    ports:
+      - 1025:25/tcp
+      - 1143:143/tcp
+    volumes:
+      - proton-bridge:/root
+    restart: unless-stopped
+    stdin_open: true 
+    tty: true
+
+volumes:
+  proton-bridge-store:
+    name: proton-bridge-store
+    # external: true

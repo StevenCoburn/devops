@@ -1,0 +1,18 @@
+---
+- name: IPTables - Accept SSH on a non-standard port
+  ansible.builtin.iptables:
+    state: present
+    chain: INPUT
+    protocol: tcp
+    destination_port: '12345'
+    ctstate: NEW
+    action: insert
+    rule_num: '2'
+    jump: ACCEPT
+    comment: Accept SSH on port 12345
+  register: iptables_update
+
+- name: Save iptables
+  ansible.builtin.command: netfilter-persistent save && netfilter-persistent reload
+  when: iptables_update is changed
+...

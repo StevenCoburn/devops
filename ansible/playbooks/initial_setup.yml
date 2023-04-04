@@ -1,0 +1,55 @@
+---
+- hosts: "initial"
+  gather_facts: false
+  become: true
+  pre_tasks:
+    - ansible.builtin.import_tasks: "../tasks/load_ssh_key.yml"
+
+  tasks:
+    # Gather facts now that we've loaded the SSH key
+    - name: "Gathering Facts"
+      ansible.builtin.setup:
+
+    - import_tasks: "../tasks/upgrade-packages.yml"
+
+    - name: "Install additional packages"
+      ansible.builtin.package:
+        state: "present"
+        name:
+          - "autofs"
+          - "bmon"
+          - "ca-certificates"
+          - "curl"
+          - "gnupg"
+          - "htop"
+          - "iftop"
+          - "lsb-release"
+          - "lshw"
+          - "nfs-common"
+          - "sudo"
+          - "slurm"
+
+    - name: "Install additional packages (local only)"
+      ansible.builtin.package:
+        state: "present"
+        name:
+          - "qemu-guest-agent"
+      when: infrastructure == 'local'
+
+    - name: "Configure SSH"
+      import_tasks: "../tasks/configure_ssh.yml"
+
+    - name: "Install Wireguard"
+      import_tasks: "../tasks/wireguard.yml"
+      when: infrastructure == 'oci'
+
+    - name: "Unmonitored reboot"
+      shell: "sleep 5 && reboot"
+      async: 1
+      poll: 0
+      args:
+        executable: "/bin/bash"
+
+  post_tasks:
+    - ansible.builtin.import_tasks: "../tasks/unload_ssh_key.yml"
+...

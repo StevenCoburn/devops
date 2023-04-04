@@ -1,0 +1,18 @@
+---
+- hosts: ""
+  gather_facts: false
+  become: false
+  pre_tasks:
+    - ansible.builtin.import_tasks: "../tasks/load_ssh_key.yml"
+
+  tasks:
+    # Gather facts now that we've loaded the SSH key
+    - name: "Gathering Facts"
+      ansible.builtin.setup:
+
+    - name: "Another Task"
+      ansible.builtin.ping:
+
+  post_tasks:
+    - ansible.builtin.import_tasks: "../tasks/unload_ssh_key.yml"
+...

@@ -1,0 +1,62 @@
+version: '3'
+
+services:
+  hbbs:
+    container_name: rustdesk-id-rendezvous-server
+    security_opt:
+      - no-new-privileges:true
+    privileged: false
+    ports:
+      - 21115:21115
+      - 21116:21116
+      - 21116:21116/udp
+      - 21118:21118
+    image: rustdesk/rustdesk-server:latest # :latest-arm64v8
+    command: hbbs -r hbbr:21117
+    volumes:
+      - rustdesk:/root
+    networks:
+      - rustdesk-net
+    depends_on:
+      - hbbr
+    restart: unless-stopped
+
+  hbbr:
+    container_name: rustdesk-relay-server
+    security_opt:
+      - no-new-privileges:true
+    privileged: false
+    ports:
+      - 21117:21117
+      - 21119:21119
+    image: rustdesk/rustdesk-server:latest # :latest-arm64v8
+    command: hbbr
+    volumes:
+      - rustdesk:/root
+    networks:
+      - rustdesk-net
+      - traefik
+    restart: unless-stopped
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.rustdeck.entrypoints=websecure
+      - traefik.http.routers.rustdeck.rule=Host(`rustdeck.${DOMAIN}`)
+      - traefik.http.routers.rustdeck.middlewares=secure-headers@file,rateLimit@file
+      - traefik.http.routers.rustdeck.tls=true
+      - traefik.http.routers.rustdeck.tls.certresolver=cloudflare
+      - traefik.http.routers.rustdeck.tls.options=default
+      - traefik.http.routers.rustdeck.service=rustdeck
+      - traefik.http.services.rustdeck.loadbalancer.server.port=21119
+      - traefik.docker.network=traefik
+
+volumes:
+  rustdesk:
+    name: rustdesk
+
+networks:
+  rustdesk-net:
+    name: rustdesk
+    # external: false
+
+  traefik:
+    name: traefik

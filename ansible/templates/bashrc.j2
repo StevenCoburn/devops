@@ -1,0 +1,29 @@
+# Enable the subsequent settings only in interactive sessions
+case $- in
+  *i*) ;;
+    *) return;;
+esac
+
+# Path to your oh-my-bash installation.
+export OSH='/usr/local/share/oh-my-bash'
+
+# Fav themes in order of coolness: powerline-multiline, axin, nwinkler, agnoster, font
+OSH_THEME="powerline-multiline"
+
+# To disable the uses of "sudo" by oh-my-bash, please set "false" to
+# this variable.  The default behavior for the empty value is "true".
+OMB_USE_SUDO=true
+
+# Completions to be loaded from ~/.oh-my-bash/completions/*
+completions=( composer defaults docker git ssh system )
+
+# Aliases to be loaded from ~/.oh-my-bash/aliases/*
+aliases=( general )
+
+# Plugins to be loaded from ~/.oh-my-bash/plugins/*)
+plugins=( bashmarks git )
+
+source "$OSH"/oh-my-bash.sh
+
+# Python (pip) modules will be installed into $HOME/.local/bin on some systems
+export PATH="$HOME/.local/bin:$PATH"

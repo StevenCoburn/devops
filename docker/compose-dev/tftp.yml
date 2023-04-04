@@ -1,0 +1,43 @@
+version: '2'
+ 
+services:
+
+  TFTP_Server:
+    image: instantlinux/dhcpd-dns-pxe:latest
+    container_name: TFTP_Server
+    hostname: tftp-server
+    restart: unless-stopped
+    volumes:
+      - /share/tftp-data:/tftpboot/pxelinux
+    networks:
+      macvlanXXX:
+        ipv4_address: x.x.x.x
+    labels:
+      - "traefik.enable=false"
+    environment:
+      TZ: ${TZ} 
+      DHCP_ENABLE: 'no'
+      DNS_ENABLE: 'no'
+      TFTP_ENABLE: 'yes'
+    ports:
+    - 69:69/udp
+
+# This was what ran on raspberry pi to supply license and stuff to Brocade switches
+  # tftpd-hpa:
+  #   image: 3x3cut0r/tftpd-hpa
+  #   container_name: TFTP-HPA
+  #   restart: unless-stopped
+  #   environment:
+  #       TZ: ${TZ}
+  #       CREATE: 1
+  #       VERBOSE: 1
+  #   labels:
+  #     - "traefik.enable=false"        
+  #   volumes:
+  #     - ${nfsvols}/tftp-data:/tftpboot
+  #   ports:
+  #     - 69:69/udp
+
+networks:
+  macvlanXXX:
+    external: true

@@ -1,0 +1,142 @@
+version: '3.8'
+
+services:
+
+  nextcloud:
+    image: nextcloud:28.0.2
+    container_name: nextcloud
+    restart: unless-stopped
+    privileged: false
+    security_opt: [no-new-privileges:true]
+    networks: [nextcloud-private, traefik]
+    volumes:
+      - nextcloud-main:/var/www/html
+      - nextcloud-data:/var/www/html/data
+      - ${nfsbackup}/nextcloud:/backups
+    environment:
+      NEXTCLOUD_TRUSTED_DOMAINS: drive.${DOMAIN}
+      OVERWRITEPROTOCOL: https
+      APACHE_DISABLE_REWRITE_IP: 1
+      TRUSTED_PROXIES: traefik
+      PHP_UPLOAD_LIMIT: 512M
+      REDIS_HOST: nextcloud-redis
+      POSTGRES_HOST: nextcloud-db
+      POSTGRES_DB_FILE: /run/secrets/nextcloud_pg_name
+      POSTGRES_USER_FILE: /run/secrets/nextcloud_pg_user
+      POSTGRES_PASSWORD_FILE: /run/secrets/nextcloud_pg_pass
+      NEXTCLOUD_ADMIN_PASSWORD_FILE: /run/secrets/nextcloud_admin_password
+      NEXTCLOUD_ADMIN_USER_FILE: /run/secrets/nextcloud_admin_user
+      # APACHE_RUN_USER: ${NFS_PUID} #k8s user on the shared storage
+      # APACHE_RUN_GROUP: ${NFS_PGID}
+    labels:
+      traefik.enable: true
+      traefik.http.routers.nextcloud.tls: true
+      traefik.http.routers.nextcloud.service: nextcloud
+      traefik.http.services.nextcloud.loadbalancer.server.port: 80
+      traefik.http.routers.nextcloud.rule: Host(`drive.${DOMAIN}`)
+      traefik.http.routers.nextcloud.middlewares: secure-headers@file,nextcloud-cal-redirect@file
+      traefik.docker.network: traefik
+    links:
+      - nextcloud-db
+      - nextcloud-redis
+    depends_on:
+      - nextcloud-db
+      - nextcloud-redis
+    secrets:
+      - nextcloud_admin_password
+      - nextcloud_admin_user
+      - nextcloud_pg_name
+      - nextcloud_pg_pass
+      - nextcloud_pg_user
+
+  # Upgrade postgres database
+  # pg_dumpall -U ${nextcloud_pg_user} > /backup/dump.sql
+  # psql -U ${nextcloud_pg_user} -f /backup/dump.sql ${nextcloud_pg_name}
+  nextcloud-db:
+    image: postgres:16
+    container_name: nextcloud-db
+    restart: unless-stopped
+    privileged: false
+    security_opt: [no-new-privileges:true]
+    networks: [nextcloud-private]
+    volumes:
+      - ${nfsvols}/nextcloud-db:/var/lib/postgresql/data
+      - ${nfsbackup}/nextcloud:/backup
+    environment:
+      POSTGRES_DB_FILE: /run/secrets/nextcloud_pg_name
+      POSTGRES_USER_FILE: /run/secrets/nextcloud_pg_user
+      POSTGRES_PASSWORD_FILE: /run/secrets/nextcloud_pg_pass
+    secrets:
+      - nextcloud_pg_name
+      - nextcloud_pg_pass
+      - nextcloud_pg_user
+
+
+  # WOPI feature check: https://collabora.$DOMAIN/hosting/discovery
+  # Admin interface: https://collabora.$DOMAIN/browser/dist/admin/admin.html
+  collabora:
+    image: collabora/code:23.05.8.4.1
+    container_name: collabora
+    restart: unless-stopped
+    cap_add:
+      - MKNOD
+    networks: [traefik]
+    environment:
+      domain: drive.${DOMAIN}
+      extra_params: "--o:ssl.enable=false --o:ssl.termination=true"
+      dictionaries: en_US
+      DONT_GEN_SSL_CERT: true
+      #username: admin
+      #password: admin
+    labels:
+      traefik.enable: true
+      traefik.http.routers.collabora.tls: true
+      traefik.http.routers.collabora.service: collabora
+      traefik.http.services.collabora.loadbalancer.server.port: 9980
+      traefik.http.routers.collabora.middlewares: secure-headers@file
+
+  nextcloud-redis:
+    image: redis:7-alpine
+    container_name: nextcloud-redis
+    hostname: nextcloud-redis
+    restart: unless-stopped
+    networks:
+      nextcloud-private:
+    volumes:
+      - nextcloud-redis:/data
+
+secrets:
+  nextcloud_admin_password:
+    file: ${nfssecrets}/nextcloud_admin_password
+  nextcloud_admin_user:
+    file: ${nfssecrets}/nextcloud_admin_user
+  nextcloud_pg_name:
+    file: ${nfssecrets}/nextcloud_pg_name
+  nextcloud_pg_pass:
+    file: ${nfssecrets}/nextcloud_pg_pass
+  nextcloud_pg_user:
+    file: ${nfssecrets}/nextcloud_pg_user
+
+volumes:
+  nextcloud-db:
+    name: nextcloud-db
+  nextcloud-redis:
+    name: nextcloud-redis
+  nextcloud-main:
+    name: nextcloud-main
+  nextcloud-data:
+    name: nextcloud-data
+    # driver_opts:
+    #   type: "nfs"
+    #   o: "${NFS_SERVER_CONNECT}"
+    #   device: ":${NEXTCLOUD_DATA_DIR}"
+  document_data:
+    name: document_data
+  document_log:
+    name: document_log
+
+networks:
+  nextcloud-private:
+    name: nextcloud-private
+  traefik:
+    name: traefik

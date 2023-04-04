@@ -1,0 +1,24 @@
+#!/bin/bash
+sleep 60 # wait for regular startup processes to complete
+while :
+do
+    if ! ping -c 1 -W 5 {{ wg_storage_gateway }} 1>/dev/null 2>&1 ; 
+    then
+        echo "$(date +%Y-%m-%d-%R) - WG is disonnected, attempting to reconnect"
+        echo "$(date +%Y-%m-%d-%R) - WG is disonnected, attempting to reconnect" >> /etc/wireguard/wg-monitor-log.txt
+        systemctl restart wg-quick@wg0.service
+        echo "$(date +%Y-%m-%d-%R) - Finished restarting WireGuard"
+        echo "$(date +%Y-%m-%d-%R) - Finished restarting WireGuard" >> /etc/wireguard/wg-monitor-log.txt
+        # echo "start wg-quick down" >> /etc/wireguard/wg-monitor-log.txt
+        # wg-quick down /etc/wireguard/wg0.conf
+        # echo "start wg-quick up" >> /etc/wireguard/wg-monitor-log.txt
+        # wg-quick up /etc/wireguard/wg0.conf
+
+        # Add an extra 30 for mount timeout (declard in /etc/fstab)
+        sleep 30
+    else
+        echo "WG is connected :)"
+        # Here we can check for mount points and mount NFS shares if needed
+        sleep 300
+    fi
+done

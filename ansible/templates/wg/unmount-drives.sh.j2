@@ -1,0 +1,4 @@
+#!/bin/bash
+{% for mapper in nfs_wan_direct_map %}
+umount -l -f {{ mapper.clientPath }} || exit 0
+{% endfor %}

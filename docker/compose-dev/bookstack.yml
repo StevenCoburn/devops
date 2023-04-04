@@ -1,0 +1,40 @@
+version: "2"
+services:
+  BookStack:
+    image: linuxserver/bookstack:latest
+    container_name: BookStack
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - DB_HOST=BookStack_MariaDB
+      - DB_USER=${BOOKSTACK_DB_USER}
+      - DB_PASS=${BOOKSTACK_DB_PASS}
+      - DB_DATABASE=${BOOKSTACK_DB_NAME}
+    volumes:
+      - BookStack-Data:/config
+    ports:
+      - 6875:80
+    restart: unless-stopped
+    depends_on:
+      - BookStack_MariaDB
+
+  BookStack_MariaDB:
+    image: mariadb:latest
+    container_name: BookStack_MariaDB
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      - MYSQL_ROOT_PASSWORD=${BOOKSTACK_DB_ROOT_PASS}
+      - MYSQL_DATABASE=${BOOKSTACK_DB_NAME}
+      - MYSQL_USER=${BOOKSTACK_DB_USER}
+      - MYSQL_PASSWORD=${BOOKSTACK_DB_PASS}
+    volumes:
+      - BookstackDB-Data:/config
+    restart: unless-stopped
+
+volumes:
+  BookStack-Data:
+    name: BookStack-Data
+  BookstackDB-Data:
+    name: BookstackDB-Data

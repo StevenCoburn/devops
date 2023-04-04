@@ -1,0 +1,35 @@
+variant: fcos
+version: 1.4.0
+kernel_arguments:
+  should_exist:
+    - enforcing=0
+    - net.ipv4.ip_forward=1
+    - net.bridge.bridge-nf-call-iptables=1
+    - net.bridge.bridge-nf-call-ip6tables=1
+passwd:
+  users:
+    - name: ansible
+      ssh_authorized_keys:
+        - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE0KPODnkXEBkk6JV7oMQDXaqcaAFIWhmRrgZAPGWNJU Ansible - 01SEP2023
+      groups: [ sudo ]
+systemd:
+  units:
+    - name: install-python.service
+      enabled: true
+      contents: |
+        [Unit]
+        Description=Layer Python with rpm-ostree
+        Wants=network-online.target
+        After=network-online.target
+        # We run before `zincati.service` to avoid conflicting rpm-ostree transactions.
+        Before=zincati.service
+        ConditionPathExists=!/var/lib/%N.stamp
+
+        [Service]
+        Type=oneshot
+        RemainAfterExit=yes
+        ExecStart=/usr/bin/rpm-ostree install -A -y --allow-inactive python3
+        ExecStart=/bin/touch /var/lib/%N.stamp
+
+        [Install]
+        WantedBy=multi-user.target

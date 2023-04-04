@@ -1,0 +1,7 @@
+# Direct Maps
+{% for mapper in nfs_direct_map %}
+{{ mapper.clientPath }}    -fstype=nfs4,rw,bg,nosuid,hard    {{ mapper.serverPath }}
+{% endfor %}
+
+# Indirect Maps (with wildcard substitution)
+*    -fstype=nfs4,rw,bg,nosuid,hard    {{ nfs_indirect_map.serverPath }}

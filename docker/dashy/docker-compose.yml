@@ -1,0 +1,41 @@
+---
+version: "3.8"
+
+networks:
+  traefik-internal:
+    external: true
+    name: traefik-internal
+
+services:
+  # Port: 80
+  dashy:
+    image: ghcr.io/lissy93/dashy:2.1.1
+    container_name: dashy
+    restart: unless-stopped
+    privileged: false
+    security_opt: [no-new-privileges:true]
+    environment:
+      NODE_ENV: production
+      UID: ${NFS_PUID}
+      GID: ${NFS_PGID}
+    volumes:
+      - ${nfsvols}/dashy/conf.yml:/app/public/conf.yml
+      - ${nfsvols}/dashy/icons:/app/public/item-icons
+      - ${nfsvols}/dashy/JetBrainsMono-Regular.ttf:/app/public/fonts/JetBrainsMono-Regular.ttf
+      - ${nfsvols}/dashy/favicon.ico:/app/dist/favicon.ico
+      - ${nfsvols}/dashy/favicon.ico:/app/dist/img/icons/favicon-16x16.png
+      - ${nfsvols}/dashy/favicon.ico:/app/dist/img/icons/apple-touch-icon-152x152.png
+    networks: [traefik-internal]
+    labels:
+      traefik.enable: true
+      traefik.http.routers.dashy.tls: true
+      traefik.http.routers.dashy.service: dashy
+      traefik.http.services.dashy.loadbalancer.server.port: 80
+      traefik.http.routers.dashy.rule: Host(`${DOMAIN}`)
+      # traefik.http.routers.dashy.middlewares: authelia@docker
+    healthcheck:
+      test: ['CMD', 'node', '/app/services/healthcheck']
+      interval: 1m30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s

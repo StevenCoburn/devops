@@ -1,0 +1,38 @@
+version: '3.8'
+
+volumes:
+  mealie:
+    name: mealie
+
+networks:
+  traefik:
+    name: traefik
+    external: true
+
+services:
+  mealie:
+    image: ghcr.io/mealie-recipes/mealie:v1.1.1
+    container_name: mealie
+    restart: always
+    privileged: false
+    security_opt: [no-new-privileges:true]
+    networks: [traefik]
+    volumes:
+      - mealie:/app/data/
+    environment:
+      BASE_URL: https://recipes.${DOMAIN}
+      DB_ENGINE: sqlite
+      TOKEN_TIME: 4
+      MAX_WORKERS: 4
+      ALLOW_SIGNUP: false
+      # PUID: ${NFS_PUID}
+      # PGID: ${NFS_PGID}
+      TZ: ${TZ}
+      WEB_CONCURRENCY: 1
+    labels:
+      traefik.enable: true
+      traefik.http.routers.mealie.tls: true
+      traefik.http.routers.mealie.service: mealie
+      traefik.http.services.mealie.loadbalancer.server.port: 9000
+      traefik.http.routers.mealie.middlewares: secure-headers@file,rateLimit@file
+      traefik.http.routers.mealie.rule: Host(`recipes.${DOMAIN}`)

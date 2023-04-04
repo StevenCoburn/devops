@@ -1,0 +1,133 @@
+variant: fcos
+version: 1.4.0
+kernel_arguments:
+  should_exist:
+    - enforcing=0
+passwd:
+  users:
+    - name: core
+      ssh_authorized_keys:
+        - ssh-ed25519 key1
+        - ssh-ed25519 key2
+      groups: [ sudo, docker ]
+    - name: ansible
+      ssh_authorized_keys:
+        - ssh-ed25519 key1
+      groups: [ sudo, docker ]
+    - name: stevencoburn
+      ssh_authorized_keys:
+        - ssh-ed25519 key1
+        - ssh-ed25519 key2
+      groups: [ sudo, docker ]
+
+storage:
+  files:
+    - path: /etc/hostname
+      overwrite: true
+      contents:
+        inline: coreos-config
+    - path: /etc/zincati/config.d/51-rollout-wariness.toml
+      contents:
+        inline: |
+          [identity]
+          rollout_wariness = 0.5
+    - path: /etc/zincati/config.d/55-updates-strategy.toml
+      contents:
+        inline: |
+          [updates]
+          strategy = "periodic"
+          [[updates.periodic.window]]
+          days = [ "Fri", "Sat" ]
+          start_time = "22:00"
+          length_minutes = 90
+    - path: /usr/local/lib/docker/cli-plugins/docker-compose
+      mode: 0755
+      contents:
+        source: https://github.com/docker/compose/releases/download/v2.12.2/docker-compose-linux-x86_64
+        verification:
+          hash: sha256-36d1728ce001c7f021294be43bdfa3f508038bb00886c34b0794f7731cc9bf4b
+    # CRI-O DNF module
+    # - path: /etc/dnf/modules.d/cri-o.module
+    #   mode: 0644
+    #   overwrite: true
+    #   contents:
+    #     inline: |
+    #       [cri-o]
+    #       name=cri-o
+    #       stream=1.24
+    #       profiles=
+    #       state=enabled
+    
+    # configuring automatic loading of br_netfilter on startup
+    - path: /etc/modules-load.d/kubernetes.conf
+      mode: 0644
+      overwrite: true
+      contents:
+        inline: |
+          overlay
+          br_netfilter
+    # setting kernel parameters required by kubelet
+    - path: /etc/sysctl.d/kubernetes.conf
+      mode: 0644
+      overwrite: true
+      contents:
+        inline: |
+          net.bridge.bridge-nf-call-iptables=1
+          net.bridge.bridge-nf-call-ip6tables=1
+          net.ipv4.ip_forward=1
+
+systemd:
+  units:
+    # - name: qemu-ga.service
+    #   enabled: true
+    #   contents: |
+    #     [Unit]
+    #     Description=QEMU Guest Agnet
+    #     After=network-online.target
+    #     Wants=network-online.target
+    #     # ConditionVirtualization=kvm
+
+    #     [Service]
+    #     ExecStartPre=-docker rm -fv qemu-ga
+    #     ExecStart=docker run --name qemu-ga --privileged --net=host -v /dev:/dev -v /etc/os-release:/etc/os-release:ro docker.io/danskadra/qemu-ga qemu-ga
+
+    #     [Install]
+    #     WantedBy=multi-user.target
+
+    # Install Kubernetes
+    # - name: rpm-ostree-install-k8s.service
+    #   enabled: true
+    #   contents: |
+    #     [Unit]
+    #     Description=Layer Kubernetes and CRI-O with rpm-ostree
+    #     Wants=network-online.target
+    #     After=network-online.target
+    #     # We run before `zincati.service` to avoid conflicting rpm-ostree transactions.
+    #     Before=zincati.service
+    #     ConditionPathExists=!/var/lib/%N.stamp
+
+    #     [Service]
+    #     Type=oneshot
+    #     RemainAfterExit=yes
+    #     ExecStart=/usr/bin/rpm-ostree install --apply-live --allow-inactive kubernetes kubernetes-kubeadm cri-o
+    #     ExecStart=/bin/touch /var/lib/%N.stamp
+
+    #     [Install]
+    #     WantedBy=multi-user.target
+
+    # NFS Mount the remote Docker folder
+    # - name: var-mnt-docker.mount
+    #   enabled: true
+    #   contents: |
+    #    [Unit]
+    #    Description=Mount /mnt/path/to/nfsdocker
+    #    After= network.target
+  
+    #    [Mount]
+    #    What=ip.of.network.share:/mnt/path/to/nfsdocker
+    #    Where=/var/mnt/docker
+    #    Type=nfs
+    #    Options=_netdev,auto
+  
+    #    [Install]
+    #    WantedBy=multi-user.target

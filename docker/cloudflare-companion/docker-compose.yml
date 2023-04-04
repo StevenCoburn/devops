@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+
+  CF-Companion:
+    image: tiredofit/traefik-cloudflare-companion:7.1.1
+    container_name: CF-Companion
+    network_mode: bridge
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    labels:
+      - traefik.enable=false
+    environment:
+        # Logging = (INFO), DEBUG, VERBOSE
+      - CONTAINER_LOG_LEVEL=INFO
+      - TIMEZONE=${TZ}
+      - CF_TOKEN=${CF_TOKEN}
+      - TARGET_DOMAIN=${DOMAIN}
+      - DOMAIN1=${DOMAIN}
+      - DOMAIN1_ZONE_ID=${CF_ZONE}
+      - DOMAIN1_PROXIED=TRUE
+

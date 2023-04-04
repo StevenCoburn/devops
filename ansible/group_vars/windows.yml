@@ -1,0 +1,10 @@
+---
+ansible_become_method: "runas"
+ansiblw_become_user: "{{ ansible_user }}"
+ansible_connection: "winrm"
+ansible_port: 5985
+# ansible_user: "user@DOMAIN.COM" # Use if domain-joined
+ansible_winrm_kerberos_delegation: "true" # Fixes multi-hop problem on domain joined clients
+ansible_winrm_server_cert_validation: "ignore"
+ansible_winrm_transport: "ntlm" # If domain joined, use kerberos
+...

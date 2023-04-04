@@ -1,0 +1,36 @@
+Port 22
+LogLevel VERBOSE
+{% if 'truenas' in group_names or 'pve' in group_names %}
+PermitRootLogin yes
+{% else %}
+PermitRootLogin no
+{% endif %}
+LoginGraceTime 30
+MaxAuthTries 3
+MaxSessions 2
+{% if wg_ip is defined and wg_ip | length %}
+ListenAddress {{ wg_ip }}
+{% else %}
+ListenAddress 0.0.0.0
+{% endif %}
+PubkeyAuthentication yes
+HostbasedAuthentication no
+IgnoreRhosts yes
+PasswordAuthentication no
+PermitEmptyPasswords no
+AuthenticationMethods publickey
+AuthorizedKeysFile .ssh/authorized_keys
+ChallengeResponseAuthentication no
+UsePAM yes
+X11Forwarding no
+PrintMotd no
+PrintLastLog yes
+ClientAliveInterval 1800
+ClientAliveCountMax 0
+AcceptEnv LANG LC_*
+{% if 'coreos' in group_names %}
+Subsystem sftp /usr/libexec/openssh/sftp-server
+Include /etc/ssh/sshd_config.d/*.conf
+{% else %}
+Subsystem sftp internal-sftp
+{% endif %}

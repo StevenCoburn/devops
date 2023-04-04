@@ -1,0 +1,37 @@
+# Unmodified compose file from https://github.com/sonatype/docker-nexus3
+
+# Doesn't want to work out of the box through Traefik (won't pass headers while uploading Docker image)
+version: '3'
+
+services:
+  nexus:
+    image: sonatype/nexus3:latest
+    container_name: nexus
+    hostname: nexus
+    restart: unless-stopped
+    privileged: false
+    volumes:
+      - nexus-data:/nexus-data
+    networks:
+      - traefik
+    # ports:
+    #   - 8081:8081
+    #   - 8082:8082      
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.nexus.entrypoints=websecure
+      - traefik.http.routers.nexus.rule=Host(`nexus.${DOMAIN}`)
+      - traefik.http.routers.nexus.middlewares=secure-headers@file,rateLimit@file
+      - traefik.http.routers.nexus.tls=true
+      - traefik.http.routers.nexus.tls.certresolver=cloudflare
+      - traefik.http.routers.nexus.service=nexus
+      - traefik.http.services.nexus.loadbalancer.server.port=8081
+      - traefik.docker.network=traefik
+  
+volumes:
+  nexus-data:
+    name: nexus-data
+
+networks:
+  traefik:
+    name: traefik

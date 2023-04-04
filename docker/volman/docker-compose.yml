@@ -1,0 +1,30 @@
+version: '3.8'
+
+# Before running, change the volume throughout this file
+
+# To backup the volume:
+  # docker compose run backup && docker compose rm -fv
+# To restore a volume:
+  # docker compose run restore && docker compose rm -fv
+# To bypass the command and enter container for debugging:
+  # docker compose run backup sh && docker compose rm -fv
+
+volumes:
+  plex-db:
+    name: plex-db
+    external: true
+
+services:
+  backup:
+    image: alpine
+    volumes:
+      - plex-db:/volume
+      - ${nfsbackup}/manual:/backup
+    command: sh -c "mkdir -p /backup/plex-db && cd /volume && tar -cvf /backup/plex-db/$$(date '+%Y-%m-%d-%H%M').tar ."
+
+  restore:
+    image: alpine
+    volumes:
+      - plex-db:/volume
+      - ${nfsbackup}/manual:/backup
+    command: sh -c "tar xvf $$(ls -t /backup/plex-db/* | head -1) -C /volume"

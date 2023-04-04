@@ -1,0 +1,64 @@
+# WARNING: This does not have an ARM64 version
+# For ARM64, you must pull the Git repo, add this compose file, and build it manually
+# Git repo: https://github.com/laurent22/joplin
+
+version: "3.8"
+
+networks:
+  joplin:
+    name: joplin
+  traefik:
+    name: traefik
+    external: true
+
+volumes:
+  joplin-db:
+    name: joplin-db
+
+services:
+  joplin-db:
+    image: postgres:14
+    container_name: joplin-db
+    volumes:
+      - joplin-db:/var/lib/postgresql/data
+    restart: unless-stopped
+    environment:
+      - APP_PORT=22300
+      - POSTGRES_PASSWORD=ChangeMe
+      - POSTGRES_USER=joplin
+      - POSTGRES_DB=joplin
+    networks:
+      - joplin
+
+  joplin:
+    image: joplin/server:latest-arm64
+    container_name: joplin
+    depends_on:
+      - joplin-db
+    build:
+      context: ./
+      dockerfile: Dockerfile.server
+    restart: unless-stopped
+    environment:
+      - APP_BASE_URL=https://joplin.${DOMAIN}
+      - DB_CLIENT=pg
+      - POSTGRES_PASSWORD=ChangeMe
+      - POSTGRES_DATABASE=joplin
+      - POSTGRES_USER=joplin
+      - POSTGRES_PORT=5432
+      - POSTGRES_HOST=joplin-db
+    networks:
+      - traefik
+      - joplin
+    security_opt:
+      - no-new-privileges:true
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.joplin-secure.entrypoints=websecure
+      - traefik.http.routers.joplin-secure.rule=Host(`joplin.${DOMAIN}`)
+      - traefik.http.routers.joplin-secure.tls=true
+      - traefik.http.routers.joplin-secure.tls.certresolver=cloudflare
+      - traefik.http.routers.joplin-secure.service=joplin
+      - traefik.http.services.joplin.loadbalancer.server.port=22300
+      - traefik.http.services.joplin.loadbalancer.passhostheader=true
+      - traefik.docker.network=traefik

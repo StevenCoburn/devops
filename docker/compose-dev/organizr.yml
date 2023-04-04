@@ -1,0 +1,20 @@
+version: "2"
+
+services:
+
+  Organizr:
+    image: organizr/organizr
+    container_name: Organizr
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    ports:
+      - 8085:80
+    restart: unless-stopped
+    volumes:
+      - Organizr:/config
+
+volumes:
+  Organizr:
+    external: true

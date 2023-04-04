@@ -1,0 +1,25 @@
+---
+- become: false
+  delegate_to: "ansible"
+  no_log: true
+  run_once: true
+  block:
+  - name: "Preload - Copy SSH key to localhost"
+    ansible.builtin.copy: 
+      content: "{{ ssh_private_key }}"
+      dest: "{{ ssh_private_key_file }}"
+      mode: 0600
+      # The user whose running the playbook
+      owner: "{{ lookup('env', 'USER') }}" 
+    changed_when: false
+
+  # Info on loading SSH key directly from variable
+  # Couldn't get the formatting correct on the variable
+  # https://stackoverflow.com/questions/46253162/add-ssh-key-from-variable
+  - name: "Preload - Load SSH key into ssh-agent"
+    ansible.builtin.expect:
+      command: "ssh-add -t 30m {{ ssh_private_key_file }}"
+      responses:
+        passphrase: "{{ ssh_key_pass }}"
+    changed_when: false
+...

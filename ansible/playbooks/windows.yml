@@ -1,0 +1,10 @@
+---
+- hosts: windows
+  vars:
+    ansible_user: "Administrator"
+    ansible_password: "{{ win_admin_password }}"
+
+  tasks:
+    - name: "Pinger"
+      win_ping:
+...

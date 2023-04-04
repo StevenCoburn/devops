@@ -1,0 +1,89 @@
+---
+- name: "WG - Install Wireguard"
+  ansible.builtin.package:
+    name:
+      - "resolvconf"
+      - "wireguard"
+    state: "present"
+
+- name: "WG - Generate Wireguard keypair"
+  shell: "wg genkey | tee /etc/wireguard/privatekey | wg pubkey | tee /etc/wireguard/publickey"
+  args:
+    creates: "/etc/wireguard/privatekey"
+
+- name: "WG - Set private key as Ansible variable"
+  shell: "cat /etc/wireguard/privatekey"
+  register: wireguard_private_key
+  changed_when: false
+
+- name: "WG - Set public key as Ansible variable"
+  shell: "cat /etc/wireguard/publickey"
+  register: wireguard_public_key
+  changed_when: false
+- debug:
+    msg: "WG IP is {{ wg_ip }} with a public key of {{ wireguard_public_key.stdout }}"
+
+- name: "WG - Create a static wg0 interface"
+  ansible.builtin.copy:
+    content: |
+      [Interface]
+      PrivateKey = {{ wireguard_private_key.stdout }}
+      Address = {{ wg_ip }}/24
+      MTU = 1420
+      #DNS = {{ wg_dns }}
+      PostUp = /etc/wireguard/mount-drives.sh
+      PreDown = /etc/wireguard/unmount-drives.sh
+      
+      [Peer]
+      PublicKey = {{ wg_server_pubkey }}
+      AllowedIPs = {{ wg_allowed_ips }}
+      Endpoint = {{ wg_endpoint }}
+    dest: "/etc/wireguard/wg0.conf"
+    mode: "0744"
+
+- name: "WG - Write pubkey to local file"
+  ansible.builtin.fetch:
+    dest: "{{ '../credentials/' + ansible_hostname + '/wireguard/' }}"
+    flat: true
+    src: "/etc/wireguard/publickey"
+
+- name: "WG - Copy scripts to client"
+  ansible.builtin.copy:
+    dest: "/etc/wireguard/"
+    mode: "0755"
+    src: "../scripts/wg-client/"
+
+- name: "WG - Enable and persist ip forwarding"
+  ansible.builtin.sysctl:
+    name: "net.ipv4.ip_forward"
+    reload: true
+    state: "present"
+    sysctl_set: true
+    value: "1"
+
+- name: "WG - Enable WireGuard on boot"
+  ansible.builtin.systemd:
+    name: "wg-quick@wg0"
+    enabled: true
+    #state: "started"
+
+- name: "WG - Create the wg-monitor service"
+  ansible.builtin.copy:
+    content: |
+      [Unit]
+      Description=Monitor WireGuard Tunnel
+      
+      [Service]
+      Type=simple
+      ExecStart=/bin/bash /etc/wireguard/wg-monitor.sh
+      
+      [Install]
+      WantedBy=multi-user.target
+    dest: "/etc/systemd/system/wg-monitor.service"
+    mode: "0644"
+
+- name: "WG - Enable the wg-monitor service"
+  ansible.builtin.systemd:
+    name: "wg-monitor"
+    enabled: true
+...

@@ -1,0 +1,130 @@
+---
+- name: "Exclude most traditional networking config if running CoreOS"
+  when: ansible_facts['pkg_mgr'] != "atomic_container"
+  block:
+  - name: "Check if GRUB file exists"
+    ansible.builtin.stat:
+      path: "/etc/default/grub"
+    register: grub_file_stat
+
+  - name: Update GRUB config
+    ansible.builtin.lineinfile:
+      path: /etc/default/grub
+      regexp: '^GRUB_CMDLINE_LINUX='
+      line: GRUB_CMDLINE_LINUX="net.ifnames=0 biosdevname=0"
+    register: grub_updated
+    when: grub_file_stat.stat.exists
+
+  - name: "Update GRUB if config has changed"
+    #ansible.builtin.command: /usr/sbin/update-grub
+    ansible.builtin.command: "/usr/sbin/grub-mkconfig -o /boot/grub/grub.cfg"
+    when: grub_updated.changed
+
+  - name: "Gather package facts"
+    ansible.builtin.package_facts:
+      manager: "auto"
+
+  - name: Gather file stats for Network Manager configs
+    stat:
+      path: '{{ item }}'
+    loop:
+      - "/etc/netplan/00-installer-config.yaml"
+      - "/etc/netplan/50-cloud-init.yaml"
+    register: netplan_files
+    when: "'netplan.io' in ansible_facts.packages"
+
+  - name: Set interface name to eno1 (Network Manager)
+    ansible.builtin.replace:
+      path: '{{ item.item }}'
+      # eno1, ens1/ens18, enp2s0, eth0
+      regexp: '(eno[0-9]|ens[0-9]?[0-9]|enp[0-9]s[0-9]?[0-9]|enp[0-9][0-9]|eth[0-9])'
+      replace: 'eno1'
+    loop: "{{ netplan_files.results }}"
+    #no_log: true
+    when:
+      - "'netplan.io' in ansible_facts.packages"
+      - item.stat.exists
+
+  - name: Remove /etc/network/interfaces
+    ansible.builtin.file:
+      path: /etc/network/interfaces
+      state: absent
+    when:
+      - infrastructure == 'local'
+      - "'ifupdown' in ansible_facts.packages"
+
+  - name: Configure network interface (local)
+    ansible.builtin.blockinfile:
+      path: /etc/network/interfaces
+      create: yes
+      block: |
+        auto lo
+        iface lo inet loopback
+        
+        # The primary network interface
+        allow-hotplug eno1
+        
+        auto eno1.{{ server_vlan }}
+        iface eno1.{{ server_vlan }} inet dhcp
+        
+        auto eno1.{{ storage_vlan }}
+        iface eno1.{{ storage_vlan }} inet dhcp
+    when:
+      - infrastructure == 'local'
+      - "'ifupdown' in ansible_facts.packages"
+
+  - name: Disable IPv6
+    sysctl:
+      name: net.ipv6.conf.all.disable_ipv6
+      value: '1'
+      state: present
+      sysctl_set: yes
+
+# Old school way to get MAC address was this:
+# MAC=$(cat /sys/class/net/$(ip route show default | awk '/default/ {print $5}')/address)
+- name: "Change network device name using a systemd link"
+  ansible.builtin.blockinfile:
+    path: "/etc/systemd/network/99-default.link"
+    create: true
+    mode: "0644"
+    block: |
+      [Match]
+      MACAddress={{ ansible_default_ipv4.macaddress }}
+
+      [Link]
+      Name=eno1
+  register: update_eth_name
+
+# Requires network-manager
+- name: "Create Server VLAN {{ server_vlan }}"
+  community.general.nmcli:
+    conn_name: "eno1.{{ server_vlan }}"
+    method6: "disabled"
+    state: "present"
+    type: "vlan"
+    vlandev: "eno1"
+    vlanid: "{{ server_vlan }}"
+  register: created_server_vlan
+
+# Requires network-manager
+- name: "Create Storage VLAN {{ storage_vlan }}"
+  community.general.nmcli:
+    conn_name: "eno1.{{ storage_vlan }}"
+    never_default4: true
+    method6: "disabled"
+    state: "present"
+    type: "vlan"
+    vlandev: "eno1"
+    vlanid: "{{ storage_vlan }}"
+  register: created_storage_vlan
+
+# Requires network-manager
+- name: "Disable non-DHCP interfaces"
+  community.general.nmcli:
+    conn_name: "eno1"
+    method4: "disabled"
+    method6: "disabled"
+    state: "present"
+    type: "ethernet"
+  register: disable_primary_interface
+...

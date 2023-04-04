@@ -1,0 +1,169 @@
+# Setup process:
+# - Install Proxmox with ZFS
+# - Access the Web GUI and overwrite /etc/network/interfaces, then reboot
+# - Run this playbook twice
+#   - First time with --ask-pass and no reboot
+#   - Second time with no --ask-pass and yes reboot
+# - Manually modify the /etc/pve/storage.cfg to add the networked storage (if not clustering)
+# - Change root password
+# - Do vendor-specific things like change fan speeds with ipmitool or install Dell OpenManage
+# - Add to cluster
+
+# Ideas / TODO:
+# - Update OpenManage installation, get it into Ansible, and actually roll it out
+# - Automate the rollout of the /etc/modprobe.d/blacklist.conf file
+# - Automate the rollout of the network config
+# - Automate the rollout of the storage config (or at least the pve api commands to add new entries)
+
+---
+- hosts: pve
+
+  vars_prompt:
+    - name: "safe_to_reboot"
+      prompt: "Is this server safe to reboot when finished? [y/N]"
+      private: false
+    
+  gather_facts: false
+  pre_tasks:
+    - ansible.builtin.import_tasks: "../tasks/load_ssh_key.yml"
+      tags: always
+
+  tasks:
+    # Gather facts now that we've loaded the SSH key
+    - name: "Gathering Facts"
+      tags: always
+      ansible.builtin.setup:
+
+    - name: "Disable PVE Subscription Repo and Ceph Enterprise Repo"
+      ansible.builtin.apt_repository:
+        repo: "{{ item }}"
+        state: "absent"
+        update_cache: false
+      loop:
+        - "deb https://enterprise.proxmox.com/debian/pve {{ ansible_distribution_release }} pve-enterprise"
+        - "deb https://enterprise.proxmox.com/debian/ceph-quincy {{ ansible_distribution_release }} enterprise"
+
+    - name: "Enable PVE and Ceph Free Repos"
+      ansible.builtin.apt_repository:
+        repo: "{{ item }}"
+        state: "present"
+        update_cache: false
+      loop:
+        - "deb http://download.proxmox.com/debian/pve {{ ansible_distribution_release }} pve-no-subscription"
+        - "deb http://download.proxmox.com/debian/ceph-quincy {{ ansible_distribution_release }} no-subscription"
+
+    - name: "Update apt cache and install some additional packages"
+      ansible.builtin.apt:
+        name:
+          - "lshw"
+          - "htop"
+          - "net-tools"
+          - "iftop"
+          - "ifupdown2"
+          - "ipmitool"
+          - "lm-sensors"
+          - "slurm"
+          - "bmon"
+        update_cache: true
+
+    - name: "Add SSH Auth Keys"
+      ansible.posix.authorized_key:
+        key: "{{ item }}"
+        state: "present"
+        user: "root"
+      loop: "{{ ssh_pub_keys }}"
+      no_log: true
+
+    - ansible.builtin.import_tasks: "../tasks/update_software.yml"
+    - ansible.builtin.import_tasks: "../tasks/configure_ssh.yml"
+
+    - name: "Update LXC template database"
+      ansible.builtin.command: "pveam update"
+      register: pveam_status
+      failed_when: "\"update successful\" not in pveam_status.stdout"
+
+    - name: "Disable the \"No Subscription\" login popup"
+      ansible.builtin.replace:
+        backup: true
+        path: "/usr/share/javascript/proxmox-widget-toolkit/proxmoxlib.js"
+        regexp: >-
+          (^\s+)(Ext.Msg.show\(\{\s+title:\s+gettext\('No valid subscription)
+        replace: '\1void({ //\2'
+      register: update_sub
+
+    - name: "Restart PVEproxy if Subscription message has changed"
+      ansible.builtin.systemd:
+        name: "pveproxy.service"
+        state: "reloaded"
+      when: update_sub.changed
+
+    - name: "Rename the local-zfs pool"
+      ansible.builtin.replace:
+        backup: true
+        path: "/etc/pve/storage.cfg"
+        regexp: "local-zfs"
+        replace: "VM-Local"
+
+    - name: "Disable local ISO store"
+      ansible.builtin.command: "pvesm set local -disable=1"
+      changed_when: false
+
+    - name: "Copy CoreOS auto-generate template"
+      ansible.builtin.template: 
+        dest: "/etc/cron.weekly/pve-fcos-template"
+        force: true
+        mode: "0755"
+        src: "../templates/pve-fcos-template.sh.j2"
+      when: "ansible_hostname == pve_primary_server"
+
+    - name: "Enable IOMMU"
+      ansible.builtin.lineinfile:
+        backrefs: true
+        line: "\\1 intel_iommu=on iommu=pt"
+        path: "/etc/kernel/cmdline"
+        regexp: '^(root(?!.*\bintel_iommu=on iommu=pt\b).*)$'
+        state: "present"
+      register: iommu_status
+
+    # This command sometimes failed in script form, but in Ansible, so far so good
+    - name: "Refresh EFI if IOMMU has changes"
+      ansible.builtin.command: "pve-efiboot-tool refresh"
+      register: pve_efitool_status
+      when: iommu_status.changed
+
+    # vfio_virqfd may not be needed in PVE 8, need to check on that
+    - name: "Ensure VFIO kernel modules are loaded"
+      ansible.builtin.lineinfile:
+        line: "{{ item }}"
+        path: "/etc/modules"
+        state: "present"
+      with_items:
+        - "vfio"
+        - "vfio_iommu_type1"
+        - "vfio_pci"
+        - "vfio_virqfd"
+
+    - name: "Change swapiness to 0"
+      ansible.posix.sysctl:
+        name: "vm.swappiness"
+        state: "present"
+        value: "0"
+
+    - name: "Reboot to activate IOMMU and apply updates"
+      ansible.builtin.reboot:
+      when: "\"y\" in safe_to_reboot | lower"
+
+    - name: "Verify IOMMU is enabled"
+      ansible.builtin.command: "dmesg"
+      register: iommu_active_status
+      changed_when: false
+
+    - fail:
+        msg: "IOMMU does not appear to be active"
+      when: ("IOMMU enabled" not in iommu_active_status.stdout) or
+            ("Enabled IRQ remapping" not in iommu_active_status.stdout)
+
+  post_tasks:
+    - ansible.builtin.import_tasks: "../tasks/unload_ssh_key.yml"
+      tags: always
+...
