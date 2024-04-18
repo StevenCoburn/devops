@@ -1,0 +1,145 @@
+#  Refer to [original documentation](https://sw.kovidgoyal.net/kitty/conf.html) for more options
+options
+
+{% if ansible_os_family != 'Darwin' %}
+shell /usr/bin/zsh
+editor /usr/bin/code
+{% endif %}
+
+# Window size
+remember_window_size yes
+initial_window_width 95c
+initial_window_height 25c
+
+# Allow other programs to control kitty.
+allow_remote_control no
+
+# The value of the TERM environment variable to set. Set for compatibility
+term xterm-256color 
+
+# Font config
+font_family      JetBrains Mono
+{% if ansible_os_family == 'Darwin' %}
+font_size 18.0
+{% else %}
+font_size 16.0
+{% endif %}
+disable_ligatures curser
+scrollback_pager less --chop-long-lines --RAW-CONTROL-CHARS +INPUT_LINE_NUMBER
+scrollback_lines 25000
+
+# The modifier keys to press when clicking with the mouse on URLs to open the URL
+open_url_modifiers ctrl
+
+# Disable the audio bell. Useful in environments that require silence.
+enable_audio_bell no
+
+# Draw only the minimum borders needed.
+draw_minimal_borders yes
+
+# The color for the border of the active window
+active_border_color #eee
+
+# Fade the text in inactive windows by the specified amount
+inactive_text_alpha 0.6
+
+# Which edge to show the tab bar on, top or bottom
+tab_bar_edge top
+
+# The tab bar style
+tab_bar_style powerline
+tab_powerline_style slanted
+
+# Cursor
+cursor_shape block
+shell_integration no-cursor
+
+# Full width tab bar
+tab_bar_background #999999
+
+# Set to yes to clear all default keyboard shortcuts
+clear_all_shortcuts no
+
+# OS-Specific Tweaks
+macos_quit_when_last_window_closed yes
+# Force x11 because the title bar is shit in wayland
+wayland_titlebar_color background
+linux_display_server x11
+
+# Copy paste consistent with other programs
+map ctrl+shift+c  no_op
+map ctrl+c  copy_and_clear_or_interrupt
+map ctrl+v  paste_from_clipboard
+map shift+insert  paste_from_clipboard
+mouse_map right click ungrabbed paste_from_clipboard
+
+# Send SIGINT (Ctrl+C) on ctrl+shift+c  (see https://developer.run/36)
+map ctrl+shift+c send_text all \x03
+
+# Hotkeys: tabs/windows
+map ctrl+` new_window_with_cwd
+map ctrl+f4 close_window
+map super+tab next_window
+map alt+enter move_window_to_top
+map ctrl+tab next_tab
+map ctrl+t      new_tab !neighbor
+
+# These used to be alt+ but they interfered with MacOS command "word skipping"
+# ctrl doesn't seem to work on Mac even though other ctrl maps work fine
+map ctrl+right   move_tab_forward
+map ctrl+left    move_tab_backward
+map f2 set_tab_title
+map shift+f6 set_tab_title
+
+map ctrl+1 goto_tab 1
+map ctrl+2 goto_tab 2
+map ctrl+3 goto_tab 3
+map ctrl+4 goto_tab 4
+map ctrl+5 goto_tab 5
+map ctrl+6 goto_tab 6
+map ctrl+7 goto_tab 7
+map ctrl+8 goto_tab 8
+map ctrl+9 goto_tab 9
+
+# Hotkeys: layout management
+map alt+` next_layout
+
+# Hotkeys: font size
+map ctrl+equal     change_font_size all +2.0
+map ctrl+minus     change_font_size all -2.0
+map ctrl+0 change_font_size all 0
+
+# Clear screen (universal, will work over ssh, python etc)
+# This is documented but doesn't seem to work for me
+# map ctrl+k send_text '\e[H\e[3J'
+map ctrl+k clear_terminal to_cursor active
+
+# Check for updates once a month (set to 0 to disable)
+update_check_interval 720
+
+# JetBrains Darcula theme (copy/pasted here instead of downloaded)
+# https://github.com/dexpota/kitty-themes
+# CHANGES:
+# - selection_background, default was 1a3272
+# - cursor, default was ffffff
+background            #202020
+foreground            #adadad
+cursor                #a5a5a5
+selection_background  #a5a5a5
+color0                #000000
+color8                #545454
+color1                #fa5355
+color9                #fb7172
+color2                #126e00
+color10               #67ff4f
+color3                #c2c300
+color11               #ffff00
+color4                #4581eb
+color12               #6d9df1
+color5                #fa54ff
+color13               #fb82ff
+color6                #33c2c1
+color14               #60d3d1
+color7                #adadad
+color15               #eeeeee
+selection_foreground #202020

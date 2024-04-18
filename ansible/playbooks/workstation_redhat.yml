@@ -1,0 +1,433 @@
+---
+- hosts: workstation_redhat
+
+  # These variables need updated occasionally to keep this playbook current
+  vars:
+    jetbrainsmono_ver: "2.304"
+    protonvpn_ver: "1.0.1-2"
+    refind_ver: "0.14.2"
+    rdmfree_ver: "2024.1.0.8"
+    veracrypt_ver: "1.26.7"
+
+  tasks:
+    - name: "Add the flathub flatpak repository remote"
+      community.general.flatpak_remote:
+        flatpakrepo_url: "https://flathub.org/repo/flathub.flatpakrepo"
+        name: "flathub"
+        state: "present"
+      become: true
+
+    - name: "Import RPM keys"
+      ansible.builtin.rpm_key:
+        key: "{{ item }}"
+      become: true
+      loop:
+        - "https://packages.microsoft.com/keys/microsoft.asc"
+        - "https://brave-browser-rpm-release.s3.brave.com/brave-core.asc"
+        - "https://repo.protonvpn.com/fedora-{{ ansible_distribution_version }}-stable/public_key.asc"
+
+    - name: "Add Brave Browser to yum repo list"
+      ansible.builtin.yum_repository:
+        baseurl: "https://brave-browser-rpm-release.s3.brave.com/{{ ansible_machine }}"
+        description: "Brave Browser"
+        enabled: true
+        name: "brave-browser"
+      become: true
+
+    - name: "Add VS Code to yum repo list"
+      ansible.builtin.yum_repository:
+        baseurl: "https://packages.microsoft.com/yumrepos/vscode"
+        description: "Visual Studio Code"
+        enabled: true
+        file: "vscode"
+        gpgcheck: true
+        gpgkey: "https://packages.microsoft.com/keys/microsoft.asc"
+        name: "code"
+      become: true
+
+    - name: "Add ProtonVPN repo by installing RPM"
+      ansible.builtin.dnf:
+        name: "https://repo.protonvpn.com/fedora-{{ ansible_distribution_version }}-stable/protonvpn-stable-release/protonvpn-stable-release-{{ protonvpn_ver }}.noarch.rpm"
+        state: "present"
+      become: true
+
+    - name: "Add RPM Fusion repos"
+      ansible.builtin.dnf:
+        disable_gpg_check: true
+        name:
+          - "https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-{{ ansible_distribution_version }}.noarch.rpm"
+          - "https://download1.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-{{ ansible_distribution_version }}.noarch.rpm"
+      become: true
+
+    - name: "Upgrade all dnf packages"
+      ansible.builtin.dnf:
+        name: "*"
+        state: "latest"
+        update_cache: true
+      become: true
+
+    # Do NOT use Flatpak version of RDMFree, modify debian version if needed
+    # Link: https://forum.devolutions.net/topics/37850/rdm-flatpak-crashes-after-launch-on-fedora-36#165221
+    - name: "Install RPMs via URL (No GPG check)"
+      ansible.builtin.dnf:
+        disable_gpg_check: true
+        name:
+          - "https://cdn.devolutions.net/download/Linux/RDM/{{ rdmfree_ver }}/RemoteDesktopManager_{{ rdmfree_ver }}_x86_64.rpm"
+          - "https://launchpad.net/veracrypt/trunk/{{ veracrypt_ver }}/+download/veracrypt-{{ veracrypt_ver }}-CentOS-8-x86_64.rpm"
+          - "https://openrgb.org/releases/release_0.9/openrgb_0.9_x86_64_f36_b5f46e3.rpm"
+      become: true
+
+    - name: "Install additional dnf software"
+      ansible.builtin.dnf:
+        allowerasing: true
+        name:
+          - "@Multimedia"
+          - "alien"
+          - "brave-browser"
+          - "chromium"
+          - "code"
+          - "dnf-plugins-core"
+          - "gamemode"
+          - "git"
+          - "gnome-extensions-app"
+          - "gnome-shell-extension-appindicator"
+          - "gnome-tweaks"
+          - "goverlay"
+          - "htop"
+          - "kitty"
+          - "libappindicator-gtk3"
+          - "lm_sensors"
+          - "lutris"
+          - "mangohud"
+          - "neofetch"
+          - "piper"
+          - "proton-vpn-gnome-desktop"
+          - "python3-pip"
+          - "qrencode"
+          - "s-tui"
+          - "seahorse"
+          - "steam"
+          - "stress"
+          - "tmux"
+          - "unzip"
+          - "util-linux-user"
+          - "vkBasalt"
+          - "vlc"
+          - "wireguard-tools"
+          - "yubikey-manager"
+          - "zip"
+          - "zsh"
+        state: "present"
+      become: true
+
+    # This installs to ~/.local/share and links to ~/.local/bin
+    # Must run 'jetbrains-toolbox' manually for first-run setup
+    - name: "Install Jetbrains Toolbox using helper script"
+      ansible.builtin.shell: >
+        if [[ -f ~/.local/bin/jetbrains-toolbox ]]; then
+          echo "installed"
+        else
+          curl -fsSL https://raw.githubusercontent.com/nagygergo/jetbrains-toolbox-install/master/jetbrains-toolbox.sh | bash
+        fi
+      changed_when: jetbrains_toolbox.stdout != 'installed'
+      register: jetbrains_toolbox
+
+    - name: "Remove package that controle swap"
+      ansible.builtin.dnf:
+        name: "zram-generator-defaults"
+        state: "absent"
+      become: true
+
+    - name: "Install software with Flatpak"
+      community.general.flatpak:
+        name:
+          - com.bitwarden.desktop
+          - com.discordapp.Discord
+          - com.heroicgameslauncher.hgl
+          - com.obsproject.Studio
+          - com.spotify.Client
+          - com.yubico.yubioath
+          - net.davidotek.pupgui2
+          - org.gabmus.whatip
+          - tv.plex.PlexDesktop
+      become: true
+
+    - name: Install python packages with pip
+      ansible.builtin.pip:
+        name:
+          - "ansible"
+          - "dnspython>=1.16.0" # required for ProtonVPN alternate routing
+          - "gnome-extensions-cli"
+      become: true
+
+    - name: "Create jetbrains font directory"
+      ansible.builtin.file:
+        mode: "0755"
+        path: "/usr/share/fonts/jetbrains"
+        state: "directory"
+      become: true
+
+    - name: "Install Jetbrains Mono fonts globally"
+      ansible.builtin.unarchive:
+        dest: "/usr/share/fonts/jetbrains"
+        include: "fonts/ttf/*"
+        remote_src: true
+        src: "https://download.jetbrains.com/fonts/JetBrainsMono-{{ jetbrainsmono_ver }}.zip"
+      register: jetbrains_mono_install
+      become: true
+
+    - name: "Refresh font cache"
+      ansible.builtin.command:
+        cmd: "fc-cache -f -s"
+      become: true
+      when: jetbrains_mono_install.changed
+
+    - name: "Create rEFInd directory"
+      ansible.builtin.file:
+        mode: "0700"
+        path: "/boot/efi/EFI/refind"
+        state: "directory"
+      become: true
+      register: refind_dir
+
+    - name: "Download and unpack rEFInd"
+      ansible.builtin.unarchive:
+        dest: "/tmp"
+        remote_src: true
+        src: "https://sourceforge.net/projects/refind/files/{{ refind_ver }}/refind-bin-{{ refind_ver }}.zip"
+      when: refind_dir.changed
+
+    - name: "Copy rEFInd files to /boot/efi"
+      ansible.builtin.copy:
+        dest: "/boot/efi/EFI/refind"
+        mode: "0700"
+        src: "/tmp/refind-bin-{{ refind_ver }}/{{ item }}"
+      become: true
+      loop:
+        - "keys"
+        - "refind/drivers_x64"
+        - "refind/icons"
+        - "refind/refind_x64.efi"
+        - "refind/tools_x64"
+      when: refind_dir.changed
+
+    - name: "Copy rEFInd config"
+      ansible.builtin.copy:
+        dest: "/boot/efi/EFI/refind/refind.conf"
+        mode: "0700"
+        src: "../templates/refind.conf"
+      become: true
+      when: refind_dir.changed
+
+    - name: "Install rEFInd theme"
+      ansible.builtin.git:
+        depth: 1
+        dest: "/boot/efi/EFI/refind/themes/refind-theme-regular"
+        repo: "https://github.com/StevenCoburn/refind-theme-regular.git"
+      become: true
+      when: refind_dir.changed
+
+    - name: "Get device name of /boot/efi mount"
+      ansible.builtin.set_fact:
+        efi_dev: "{{ (ansible_mounts | selectattr('mount', 'equalto', '/boot/efi') | map(attribute='device') | first) | regex_replace('(p[0-9]|[0-9])$', '') }}"
+      when: refind_dir.changed
+
+    - name: "Add rEFInd to EFI boot menu"
+      ansible.builtin.command:
+        cmd: "efibootmgr -c -l \\\\EFI\\\\refind\\\\refind_x64.efi -L rEFInd -d {{ efi_dev }}"
+      become: true
+      when: refind_dir.changed
+
+    - name: "Suppress PKCS#11 messages in Firefox when YubiKey is plugged in"
+      ansible.builtin.lineinfile:
+        line: "disable-in: firefox"
+        path: "/usr/share/p11-kit/modules/opensc.module"
+      become: true
+
+    - name: "Create kitty config directory"
+      ansible.builtin.file:
+        mode: "0700"
+        path: "{{ ansible_user_dir }}/.config/kitty"
+        state: "directory"
+
+    - name: "Copy kitty terminal config"
+      ansible.builtin.template:
+        dest: "{{ ansible_user_dir }}/.config/kitty/kitty.conf"
+        mode: "0644"
+        src: "../templates/kitty.conf.j2"
+
+    - name: "Download custom kitty icon"
+      ansible.builtin.get_url:
+        dest: "/usr/lib64/kitty/logo/whiskers.png"
+        mode: "0644"
+        url: "https://github.com/samholmes/whiskers/blob/main/whiskers.png?raw=true"
+      become: true
+
+    - name: "Replace kitty icon in desktop config files"
+      community.general.ini_file:
+        mode: "0644"
+        option: "Icon"
+        path: "{{ item }}"
+        section: "Desktop Entry"
+        value: "/usr/lib64/kitty/logo/whiskers.png"
+      become: true
+      loop:
+        - "/usr/share/applications/kitty.desktop"
+        - "/usr/share/applications/kitty-open.desktop"
+
+    - name: "Use gnome-extensions-cli to install and enable extensions"
+      ansible.builtin.shell: >
+        gnome-extensions-cli --filesystem install {{ item }} | grep -q "already installed"
+        && echo -n INSTALLED
+        || echo -n "NOT INSTALLED"
+      changed_when: gnome_extensions.stdout != 'INSTALLED'
+      loop:
+        - "307"  # dash-to-dock
+        - "1634" # resource-monitor
+        - "4135" # espresso
+        - "4356" # top-bar-organizer
+        - "4655" # date-menu-formatter
+        - "5362" # wireguard-vpn-extension
+        - "6109" # noannoyance fork
+      register: gnome_extensions
+
+    # Could use grubby but it's not idempotent
+    - name: "Update grub config to disable USB autosuspend"
+      ansible.builtin.lineinfile:
+        backrefs: true
+        backup: true
+        line: 'GRUB_CMDLINE_LINUX="\1 usbcore.autosuspend=-1"'
+        path: /etc/default/grub
+        regexp: '^GRUB_CMDLINE_LINUX="((?:(?!usbcore.autosuspend=-1).)*?)"$'
+      become: true
+      register: usb_autosuspend
+
+    - name: "Update /etc/default/grub to play nice with rEFInd"
+      ansible.builtin.lineinfile:
+        line: "{{ item.setting_value }}"
+        path: "/etc/default/grub"
+        regexp: "{{ item.setting_name }}"
+      become: true
+      loop:
+        - { setting_name: "^GRUB_TIMEOUT=", setting_value: "GRUB_TIMEOUT=0" }
+        - { setting_name: "^GRUB_HIDDEN_TIMEOUT=", setting_value: "GRUB_HIDDEN_TIMEOUT=2" }
+        - { setting_name: "^GRUB_HIDDEN_TIMEOUT_QUIET=", setting_value: "GRUB_HIDDEN_TIMEOUT_QUIET=true" }
+      register: grub_updated
+
+    - name: "Update GRUB if config has changed"
+      ansible.builtin.command: "/usr/sbin/grub2-mkconfig -o /etc/grub2-efi.cfg"
+      become: true
+      when: grub_updated.changed or usb_autosuspend.changed
+
+    - name: "Customize Gnome with dconf"
+      community.general.dconf:
+        key: "{{ item.key }}"
+        value: "{{ item.value }}"
+      loop:
+        - { key: '/com/github/Ory0n/Resource_Monitor/decimalsstatus', value: 'false' }
+        - { key: '/com/github/Ory0n/Resource_Monitor/diskspacestatus', value: 'false' }
+        - { key: '/com/github/Ory0n/Resource_Monitor/diskstatsstatus', value: 'false' }
+        - { key: '/com/github/Ory0n/Resource_Monitor/iconsposition', value: "'left'" }
+        - { key: '/com/github/Ory0n/Resource_Monitor/iconsstatus', value: 'true' }
+        - { key: '/com/github/Ory0n/Resource_Monitor/netunit', value: "'bits'" }
+        - { key: '/com/github/Ory0n/Resource_Monitor/netunitmeasure', value: "'m'" }
+        - { key: '/com/github/Ory0n/Resource_Monitor/thermalcputemperaturestatus', value: 'true' }
+        - { key: '/org/gnome/desktop/background/picture-options', value: "'zoom'" }
+        - { key: '/org/gnome/desktop/background/picture-uri', value: "'file:///usr/share/backgrounds/fedora-workstation/petals_light.webp'" }
+        - { key: '/org/gnome/desktop/background/picture-uri-dark', value: "'file:///usr/share/backgrounds/fedora-workstation/petals_dark.webp'" }
+        - { key: '/org/gnome/desktop/background/primary-color', value: "'#000000000000'" }
+        - { key: '/org/gnome/desktop/background/secondary-color', value: "'#000000000000'" }
+        - { key: '/org/gnome/desktop/interface/color-scheme', value: "'prefer-dark'" }
+        - { key: '/org/gnome/desktop/interface/monospace-font-name', value: "'JetBrains Mono Medium 10'" }
+        - { key: '/org/gnome/desktop/interface/show-battery-percentage', value: 'true' }
+        - { key: '/org/gnome/desktop/peripherals/touchpad/natural-scroll', value: 'false' }
+        - { key: '/org/gnome/desktop/peripherals/touchpad/tap-to-click', value: 'true' }
+        - { key: '/org/gnome/desktop/peripherals/touchpad/two-finger-scrolling-enabled', value: 'true' }
+        - { key: '/org/gnome/desktop/screensaver/lock-delay', value: 'uint32 30' }
+        - { key: '/org/gnome/desktop/session/idle-delay', value: 'uint32 300' }
+        - { key: '/org/gnome/desktop/wm/preferences/button-layout', value: "'close,minimize,maximize:appmenu'" }
+        - { key: '/org/gnome/settings-daemon/plugins/power/sleep-inactive-ac-type', value: "'nothing'" }
+        - { key: '/org/gnome/settings-daemon/plugins/power/sleep-inactive-battery-timeout', value: '1800' }
+        - { key: '/org/gnome/shell/extensions/dash-to-dock/disable-overview-on-startup', value: 'true' }
+        - { key: '/org/gnome/shell/extensions/dash-to-dock/multi-monitor', value: 'true' }
+        - { key: '/org/gnome/shell/extensions/dash-to-dock/running-indicator-style', value: "'SEGMENTED'" }
+        - { key: '/org/gnome/shell/extensions/dash-to-dock/show-apps-at-top', value: 'true' }
+        - { key: '/org/gnome/shell/extensions/dash-to-dock/show-mounts-network', value: 'true' }
+        - { key: '/org/gnome/shell/extensions/date-menu-formatter/font-size', value: '14' }
+        - { key: '/org/gnome/shell/extensions/date-menu-formatter/pattern', value: "'EEE, MMM d  H : mm :ss'" }
+        - { key: '/org/gnome/shell/extensions/date-menu-formatter/text-align', value: "'center'" }
+        - { key: '/org/gnome/shell/extensions/ding/add-volumes-opposite', value: 'false' }
+        - { key: '/org/gnome/shell/extensions/ding/check-x11wayland', value: 'true' }
+        - { key: '/org/gnome/shell/extensions/ding/keep-arranged', value: 'true' }
+        - { key: '/org/gnome/shell/extensions/ding/show-drop-place', value: 'false' }
+        - { key: '/org/gnome/shell/extensions/ding/show-home', value: 'false' }
+        - { key: '/org/gnome/shell/extensions/ding/show-network-volumes', value: 'true' }
+        - { key: '/org/gnome/shell/extensions/ding/show-trash', value: 'false' }
+        - { key: '/org/gnome/shell/extensions/ding/show-volumes', value: 'true' }
+        - { key: '/org/gnome/shell/extensions/ding/start-corner', value: "'top-right'" }
+        - { key: '/org/gnome/shell/extensions/espresso/has-battery', value: 'true' }
+        - { key: '/org/gnome/shell/extensions/espresso/show-notifications', value: 'false' }
+        - { key: '/org/gnome/shell/extensions/top-bar-organizer/center-box-order', value: "['dateMenu']" }
+        - { key: '/org/gnome/shell/extensions/top-bar-organizer/left-box-order', value: "['activities', 'Resource_Monitor@Ory0n']" }
+        - { key: '/org/gnome/shell/extensions/top-bar-organizer/right-box-order', value: "['screenRecording', 'screenSharing', 'keyboard', 'gnome-wireguard-extension@SJBERTRAND.github.com', 'Espresso', 'dwellClick', 'a11y', 'quickSettings']" }
+        - { key: '/org/gnome/shell/favorite-apps', value: "['org.gnome.Nautilus.desktop', 'brave-browser.desktop', 'firefox.desktop', 'com.bitwarden.desktop.desktop', 'com.yubico.yubioath.desktop', 'com.devolutions.remotedesktopmanager.desktop', 'code.desktop', 'kitty.desktop', 'tv.plex.PlexDesktop.desktop', 'com.spotify.Client.desktop']" }
+        - { key: '/org/gnome/tweaks/show-extensions-notice', value: 'false' }
+      loop_control:
+        label: "{{ item.key }}"
+
+    - name: Ensure zsh is the default shell
+      ansible.builtin.user:
+        name: "{{ ansible_user }}"
+        shell: "/usr/bin/zsh"
+      become: true
+
+    - name: "Clone Oh My Zsh"
+      ansible.builtin.git:
+        depth: 1
+        dest: "{{ ansible_user_dir }}/.oh-my-zsh"
+        repo: "https://github.com/ohmyzsh/ohmyzsh.git"
+
+    - name: "Install oh-my-zsh plugins"
+      ansible.builtin.git:
+        depth: 1
+        dest: "{{ ansible_user_dir }}/.oh-my-zsh/custom/plugins/{{ item }}"
+        repo: "https://github.com/zsh-users/{{ item }}.git"
+      loop:
+        - "zsh-autosuggestions"
+        - "zsh-completions"
+        - "zsh-syntax-highlighting"
+
+    - name: "Install oh-my-zsh theme(s)"
+      ansible.builtin.git:
+        depth: 1
+        dest: "{{ ansible_user_dir }}/.oh-my-zsh/custom/themes/powerlevel10k"
+        repo: "https://github.com/romkatv/powerlevel10k.git"
+
+    - name: "Copy zshrc"
+      ansible.builtin.template:
+        dest: "{{ ansible_user_dir }}/.zshrc"
+        mode: "0644"
+        src: "../templates/zshrc.j2"
+
+    # p10k setup combo: y n n 2 1 4 2 1 1 1 2 1 2 2 2 n 1 y
+    - name: "Copy powerlevel10k config"
+      ansible.builtin.copy:
+        dest: "{{ ansible_user_dir }}/.p10k.zsh"
+        mode: "0644"
+        src: "../templates/p10k.zsh"
+
+    - name: "Check if reboot-requied file exists"
+      ansible.builtin.stat:
+        path: /var/run/reboot-required
+      register: reboot_required
+
+    - name: "Reboot"
+      ansible.builtin.reboot:
+      become: true
+      when:
+        - reboot_required.stat.exists or
+          refind_dir.changed or
+          gnome_extensions.changed or
+          usb_autosuspend.changed or
+          grub_updated.changed
+...
