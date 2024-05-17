@@ -1,38 +1,55 @@
 # Setup process:
 # - Install Proxmox with ZFS
-# - Access the Web GUI and overwrite /etc/network/interfaces, then reboot
-# - Run this playbook twice
-#   - First time with --ask-pass and no reboot
-#   - Second time with no --ask-pass and yes reboot
-# - Manually modify the /etc/pve/storage.cfg to add the networked storage (if not clustering)
-# - Change root password
-# - Do vendor-specific things like change fan speeds with ipmitool or install Dell OpenManage
+# - Add Ansible SSH key to the root authorized_keys
+# - Run this playbook
 # - Add to cluster
 
-# Ideas / TODO:
-# - Update OpenManage installation, get it into Ansible, and actually roll it out
-# - Automate the rollout of the /etc/modprobe.d/blacklist.conf file
-# - Automate the rollout of the network config
-# - Automate the rollout of the storage config (or at least the pve api commands to add new entries)
+# Initial cluster creation OR single-node operation
+# - Manually modify the /etc/pve/storage.cfg to add networked storage
 
 ---
-- hosts: pve
+- name: "Proxmox VE Setup"
+  hosts: "pve"
+  gather_facts: false
 
   vars_prompt:
     - name: "safe_to_reboot"
-      prompt: "Is this server safe to reboot when finished? [y/N]"
       private: false
-    
-  gather_facts: false
+      prompt: "Is this server safe to reboot when finished? [y/N]"
+
+    - name: "root_password"
+      private: true
+      prompt: "Enter new root password (leave empty if not changing password)"
+
+  handlers:
+    - name: "Restart PVEproxy"
+      ansible.builtin.systemd:
+        name: "pveproxy.service"
+        state: "reloaded"
+
+    # This command sometimes failed in script form, but in Ansible, so far so good
+    - name: "Refresh EFI config"
+      ansible.builtin.command: "pve-efiboot-tool refresh"
+      changed_when: false
+      register: pve_efitool_status
+
   pre_tasks:
-    - ansible.builtin.import_tasks: "../tasks/load_ssh_key.yml"
-      tags: always
+    - name: "Load SSH Key"
+      tags: "always"
+      ansible.builtin.import_tasks: "../tasks/load_ssh_key.yml"
 
   tasks:
     # Gather facts now that we've loaded the SSH key
     - name: "Gathering Facts"
-      tags: always
+      tags: "always"
       ansible.builtin.setup:
+
+    - name: "Change root password"
+      ansible.builtin.user:
+        name: "root"
+        password: "{{ root_password | password_hash('sha512') }}"
+      no_log: true
+      when: root_password != ""
 
     - name: "Disable PVE Subscription Repo and Ceph Enterprise Repo"
       ansible.builtin.apt_repository:
@@ -52,21 +69,36 @@
         - "deb http://download.proxmox.com/debian/pve {{ ansible_distribution_release }} pve-no-subscription"
         - "deb http://download.proxmox.com/debian/ceph-quincy {{ ansible_distribution_release }} no-subscription"
 
+    - name: "Enable Intel firmware repo for MS-01 hardware"
+      ansible.builtin.apt_repository:
+        repo: "deb http://ftp.debian.org/debian {{ ansible_distribution_release }} main contrib non-free-firmware"
+        state: "present"
+        update_cache: false
+      when: ansible_system_vendor == 'Micro Computer (HK) Tech Limited'
+
     - name: "Update apt cache and install some additional packages"
       ansible.builtin.apt:
         name:
-          - "lshw"
+          - "bmon"
           - "htop"
-          - "net-tools"
           - "iftop"
           - "ifupdown2"
           - "ipmitool"
           - "lm-sensors"
+          - "lshw"
+          - "net-tools"
           - "slurm"
-          - "bmon"
         update_cache: true
 
-    - name: "Add SSH Auth Keys"
+    - name: "Install intel-firmware for MS-01 hardware"
+      ansible.builtin.apt:
+        name: "intel-microcode"
+      when: ansible_system_vendor == 'Micro Computer (HK) Tech Limited'
+
+    - name: "Update software using the OS package manager"
+      ansible.builtin.import_tasks: "../tasks/update_software.yml"
+
+    - name: "Add authorized SSH keys"
       ansible.posix.authorized_key:
         key: "{{ item }}"
         state: "present"
@@ -74,13 +106,14 @@
       loop: "{{ ssh_pub_keys }}"
       no_log: true
 
-    - ansible.builtin.import_tasks: "../tasks/update_software.yml"
-    - ansible.builtin.import_tasks: "../tasks/configure_ssh.yml"
+    - name: "Configure SSH"
+      ansible.builtin.import_tasks: "../tasks/configure_ssh.yml"
 
     - name: "Update LXC template database"
       ansible.builtin.command: "pveam update"
       register: pveam_status
       failed_when: "\"update successful\" not in pveam_status.stdout"
+      changed_when: false
 
     - name: "Disable the \"No Subscription\" login popup"
       ansible.builtin.replace:
@@ -89,13 +122,7 @@
         regexp: >-
           (^\s+)(Ext.Msg.show\(\{\s+title:\s+gettext\('No valid subscription)
         replace: '\1void({ //\2'
-      register: update_sub
-
-    - name: "Restart PVEproxy if Subscription message has changed"
-      ansible.builtin.systemd:
-        name: "pveproxy.service"
-        state: "reloaded"
-      when: update_sub.changed
+      notify: "Restart PVEproxy"
 
     - name: "Rename the local-zfs pool"
       ansible.builtin.replace:
@@ -109,12 +136,150 @@
       changed_when: false
 
     - name: "Copy CoreOS auto-generate template"
-      ansible.builtin.template: 
+      ansible.builtin.template:
         dest: "/etc/cron.weekly/pve-fcos-template"
         force: true
         mode: "0755"
-        src: "../templates/pve-fcos-template.sh.j2"
+        src: "{{ inventory_dir }}/templates/pve-fcos-template.sh.j2"
       when: "ansible_hostname == pve_primary_server"
+
+    - name: "Blacklist SAS controllers and GPUs"
+      ansible.builtin.copy:
+        content: |
+          # megaraid_sas is for SAS controllers with IR firmware (even in HBA mode)
+          # mpt3sas is for SAS controllers with IT firmware
+          blacklist megaraid_sas
+          blacklist mpt3sas
+
+          # blacklist AMD and Nvidia GPUs
+          blacklist nouveau
+          blacklist nvidia*
+          blacklist radeon
+        dest: "/etc/modprobe.d/blacklist.conf"
+        mode: "0644"
+
+    # Get network interfaces matching '^en[o,p,s]|^eth', append 'ansible_', and convert to variable
+    - name: "Convert network interface names to ansible variables"
+      ansible.builtin.set_fact:
+        physical_interfaces: >-
+          {{
+            ['ansible_']
+            | product(ansible_interfaces | select('match', '^en[o,p,s]|^eth'))
+            | map('join')
+            | map('extract', vars)
+            | list
+          }}
+        reverse_sort: "{{ (ansible_system_vendor == 'Micro Computer (HK) Tech Limited') | ternary(true, false) }}"
+
+    # Since the Minisforum PCs have the vPro interface on phc_index 1 instead of 0,
+    #   we need to reverse sort their 1/2.5g interfaces to use the vPro NIC as PVE management
+    - name: "Seperate 1g and 10g interface variables"
+      ansible.builtin.set_fact:
+        gigabit_interfaces: >-
+          {{
+            physical_interfaces
+            | selectattr('module', 'in', ['tg3', 'igb', 'e1000e', 'igc'])
+            | sort(reverse=reverse_sort, attribute='phc_index')
+            | list
+          }}
+        ten_gigabit_interfaces: >-
+          {{
+            physical_interfaces
+            | selectattr('module', 'in', ['i40e', 'ixgbe'])
+            | sort(attribute='phc_index')
+            | list
+          }}
+
+    - name: "Disable IPv6"
+      ansible.posix.sysctl:
+        name: "net.ipv6.conf.all.disable_ipv6"
+        value: "1"
+        state: "present"
+        sysctl_set: true
+
+    - name: "Add kernel parameters to disable net.ifnames and biosdevname"
+      ansible.builtin.lineinfile:
+        backrefs: true
+        line: "\\1 net.ifnames=0 biosdevname=0"
+        path: "/etc/kernel/cmdline"
+        regexp: '^(root(?!.*\bnet.ifnames=0 biosdevname=0\b).*)$'
+        state: "present"
+      notify: "Refresh EFI config"
+
+    - name: "Change network interface name(s) - 1g/2.5g"
+      ansible.builtin.copy:
+        content: |
+          [Match]
+          MACAddress={{ item.macaddress }}
+
+          [Link]
+          Name=eth0{{ idx + 1 }}
+        dest: "/etc/systemd/network/0{{ idx + 1 }}-eth0{{ idx + 1 }}.link"
+        mode: "0644"
+      loop: "{{ gigabit_interfaces }}"
+      loop_control:
+        index_var: idx
+        label: "{{ item.device }}"
+
+    - name: "Change network interface name(s) - 10g"
+      ansible.builtin.copy:
+        content: |
+          [Match]
+          MACAddress={{ item.macaddress }}
+
+          [Link]
+          Name=eth{{ idx + 11 }}
+        dest: "/etc/systemd/network/{{ idx + 11 }}-eth{{ idx + 11 }}.link"
+        mode: "0644"
+      loop: "{{ ten_gigabit_interfaces }}"
+      loop_control:
+        index_var: idx
+        label: "{{ item.device }}"
+
+    - name: "Setup etc/network/interfaces"
+      ansible.builtin.copy:
+        content: |
+          auto lo
+          iface lo inet loopback
+
+          auto eth01
+          iface eth01 inet static
+            address {{ pve_servers | selectattr('name', 'equalto', inventory_hostname) | map(attribute='mgmt_ip') | first }}
+            gateway {{ pve_servers | selectattr('name', 'equalto', inventory_hostname) | map(attribute='gateway') | first }}
+          #1G PVE Management
+
+          auto eth02
+          iface eth02 inet manual
+
+          auto vmbr0
+          iface vmbr0 inet manual
+            bridge-ports eth02
+            bridge-stp off
+            bridge-fd 0
+            bridge-vlan-aware yes
+            bridge-vids {{ vlan_list }}
+          #1G VM Bridge
+
+          auto eth11
+          iface eth11 inet static
+            address {{ pve_servers | selectattr('name', 'equalto', inventory_hostname) | map(attribute='storage_ip') | first }}
+          #10G Storage
+
+          auto eth12
+          iface eth12 inet manual
+
+          auto vmbr1
+          iface vmbr1 inet manual
+            bridge-ports eth12
+            bridge-stp off
+            bridge-fd 0
+            bridge-vlan-aware yes
+            bridge-vids {{ vlan_list }}
+          #10G VM Bridge
+
+          source /etc/network/interfaces.d/*
+        dest: "/etc/network/interfaces"
+        mode: "0644"
 
     - name: "Enable IOMMU"
       ansible.builtin.lineinfile:
@@ -123,13 +288,10 @@
         path: "/etc/kernel/cmdline"
         regexp: '^(root(?!.*\bintel_iommu=on iommu=pt\b).*)$'
         state: "present"
-      register: iommu_status
+      notify: "Refresh EFI config"
 
-    # This command sometimes failed in script form, but in Ansible, so far so good
-    - name: "Refresh EFI if IOMMU has changes"
-      ansible.builtin.command: "pve-efiboot-tool refresh"
-      register: pve_efitool_status
-      when: iommu_status.changed
+    - name: "Run handlers in case we need to refresh EFI config"
+      ansible.builtin.meta: "flush_handlers"
 
     # vfio_virqfd may not be needed in PVE 8, need to check on that
     - name: "Ensure VFIO kernel modules are loaded"
@@ -158,12 +320,14 @@
       register: iommu_active_status
       changed_when: false
 
-    - fail:
+    - name: "Fail if IOMMU is not enabled"
+      ansible.builtin.fail:
         msg: "IOMMU does not appear to be active"
       when: ("IOMMU enabled" not in iommu_active_status.stdout) or
             ("Enabled IRQ remapping" not in iommu_active_status.stdout)
 
   post_tasks:
-    - ansible.builtin.import_tasks: "../tasks/unload_ssh_key.yml"
-      tags: always
+    - name: "Unload SSH Key"
+      tags: "always"
+      ansible.builtin.import_tasks: "../tasks/unload_ssh_key.yml"
 ...
