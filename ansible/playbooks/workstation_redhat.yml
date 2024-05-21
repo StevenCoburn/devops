@@ -1,5 +1,20 @@
+# Manual tasks:
+# - Extensions:
+#   - Enable built-in AppIndicator extension
+#   - Manually install 4362 - fullscreen-avoider and 2087 - desktop-icons-ng-ding (gext install 2087 4362)
+#   - Resource Monitor might need the correct temp probe selected
+# - Run the command 'jetbrains-toolbox' for first-run setup and to download tools
+# - Change hostname and password
+# - Customize app menu (put default apps into folder, IDEs into folder, etc.)
+# - Configure auth (yubikey, biometrics, decrypt drive options)
+# - Make sure yubikey SSH works (`ssh-keygen -K`, rename sk key name, `ssh -T git@github.com`)
+# - Add ~/.vault_pass.txt for ansible
+# - Add wireguard tunnel(s) to NetworkManager - `nmcli connection import type wireguard file my/wgconf.conf`
+#  - Customize nautilus sidebar and settings (network shares, list view, etc)
+
 ---
-- hosts: workstation_redhat
+- name: "Workstation Setup"
+  hosts: workstation_redhat
 
   # These variables need updated occasionally to keep this playbook current
   vars:
@@ -91,6 +106,7 @@
           - "git"
           - "gnome-extensions-app"
           - "gnome-shell-extension-appindicator"
+          - "gnome-themes-extra"
           - "gnome-tweaks"
           - "goverlay"
           - "htop"
@@ -124,6 +140,7 @@
     # Must run 'jetbrains-toolbox' manually for first-run setup
     - name: "Install Jetbrains Toolbox using helper script"
       ansible.builtin.shell: >
+        set -o pipefail
         if [[ -f ~/.local/bin/jetbrains-toolbox ]]; then
           echo "installed"
         else
@@ -181,6 +198,7 @@
         cmd: "fc-cache -f -s"
       become: true
       when: jetbrains_mono_install.changed
+      changed_when: false
 
     - name: "Create rEFInd directory"
       ansible.builtin.file:
@@ -254,7 +272,7 @@
       ansible.builtin.template:
         dest: "{{ ansible_user_dir }}/.config/kitty/kitty.conf"
         mode: "0644"
-        src: "../templates/kitty.conf.j2"
+        src: "{{ inventory_dir }}/templates/kitty.conf.j2"
 
     - name: "Download custom kitty icon"
       ansible.builtin.get_url:
@@ -277,6 +295,7 @@
 
     - name: "Use gnome-extensions-cli to install and enable extensions"
       ansible.builtin.shell: >
+        set -o pipefail
         gnome-extensions-cli --filesystem install {{ item }} | grep -q "already installed"
         && echo -n INSTALLED
         || echo -n "NOT INSTALLED"
@@ -317,6 +336,7 @@
     - name: "Update GRUB if config has changed"
       ansible.builtin.command: "/usr/sbin/grub2-mkconfig -o /etc/grub2-efi.cfg"
       become: true
+      changed_when: false
       when: grub_updated.changed or usb_autosuspend.changed
 
     - name: "Customize Gnome with dconf"
@@ -338,6 +358,7 @@
         - { key: '/org/gnome/desktop/background/primary-color', value: "'#000000000000'" }
         - { key: '/org/gnome/desktop/background/secondary-color', value: "'#000000000000'" }
         - { key: '/org/gnome/desktop/interface/color-scheme', value: "'prefer-dark'" }
+        - { key: '/org/gnome/desktop/interface/gtk-theme', value: "'Adwaita-dark'" }
         - { key: '/org/gnome/desktop/interface/monospace-font-name', value: "'JetBrains Mono Medium 10'" }
         - { key: '/org/gnome/desktop/interface/show-battery-percentage', value: 'true' }
         - { key: '/org/gnome/desktop/peripherals/touchpad/natural-scroll', value: 'false' }
@@ -346,6 +367,9 @@
         - { key: '/org/gnome/desktop/screensaver/lock-delay', value: 'uint32 30' }
         - { key: '/org/gnome/desktop/session/idle-delay', value: 'uint32 300' }
         - { key: '/org/gnome/desktop/wm/preferences/button-layout', value: "'close,minimize,maximize:appmenu'" }
+        - { key: '/org/gnome/nautilus/list-view/use-tree-view', value: 'true' }
+        - { key: '/org/gnome/nautilus/preferences/default-folder-viewer', value: "'list-view'" }
+        - { key: '/org/gnome/nautilus/preferences/migrated-gtk-settings', value: 'true' }
         - { key: '/org/gnome/settings-daemon/plugins/power/sleep-inactive-ac-type', value: "'nothing'" }
         - { key: '/org/gnome/settings-daemon/plugins/power/sleep-inactive-battery-timeout', value: '1800' }
         - { key: '/org/gnome/shell/extensions/dash-to-dock/disable-overview-on-startup', value: 'true' }
@@ -369,7 +393,7 @@
         - { key: '/org/gnome/shell/extensions/espresso/show-notifications', value: 'false' }
         - { key: '/org/gnome/shell/extensions/top-bar-organizer/center-box-order', value: "['dateMenu']" }
         - { key: '/org/gnome/shell/extensions/top-bar-organizer/left-box-order', value: "['activities', 'Resource_Monitor@Ory0n']" }
-        - { key: '/org/gnome/shell/extensions/top-bar-organizer/right-box-order', value: "['screenRecording', 'screenSharing', 'keyboard', 'gnome-wireguard-extension@SJBERTRAND.github.com', 'Espresso', 'dwellClick', 'a11y', 'quickSettings']" }
+        - { key: '/org/gnome/shell/extensions/top-bar-organizer/right-box-order', value: "['appindicator-kstatusnotifieritem-proton-vpn-app', 'appindicator-kstatusnotifieritem-toolbox', 'screenRecording', 'screenSharing', 'keyboard', 'gnome-wireguard-extension@SJBERTRAND.github.com', 'Espresso', 'dwellClick', 'a11y', 'quickSettings']" }
         - { key: '/org/gnome/shell/favorite-apps', value: "['org.gnome.Nautilus.desktop', 'brave-browser.desktop', 'firefox.desktop', 'com.bitwarden.desktop.desktop', 'com.yubico.yubioath.desktop', 'com.devolutions.remotedesktopmanager.desktop', 'code.desktop', 'kitty.desktop', 'tv.plex.PlexDesktop.desktop', 'com.spotify.Client.desktop']" }
         - { key: '/org/gnome/tweaks/show-extensions-notice', value: 'false' }
       loop_control:
@@ -386,12 +410,14 @@
         depth: 1
         dest: "{{ ansible_user_dir }}/.oh-my-zsh"
         repo: "https://github.com/ohmyzsh/ohmyzsh.git"
+        version: "master"
 
     - name: "Install oh-my-zsh plugins"
       ansible.builtin.git:
         depth: 1
         dest: "{{ ansible_user_dir }}/.oh-my-zsh/custom/plugins/{{ item }}"
         repo: "https://github.com/zsh-users/{{ item }}.git"
+        version: "master"
       loop:
         - "zsh-autosuggestions"
         - "zsh-completions"
@@ -402,12 +428,13 @@
         depth: 1
         dest: "{{ ansible_user_dir }}/.oh-my-zsh/custom/themes/powerlevel10k"
         repo: "https://github.com/romkatv/powerlevel10k.git"
+        version: "master"
 
     - name: "Copy zshrc"
       ansible.builtin.template:
         dest: "{{ ansible_user_dir }}/.zshrc"
         mode: "0644"
-        src: "../templates/zshrc.j2"
+        src: "{{ inventory_dir }}/templates/zshrc.j2"
 
     # p10k setup combo: y n n 2 1 4 2 1 1 1 2 1 2 2 2 n 1 y
     - name: "Copy powerlevel10k config"
