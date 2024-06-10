@@ -41,7 +41,7 @@ networks:
 
 services:
   homeassistant:
-    image: ghcr.io/home-assistant/home-assistant:2024.2
+    image: ghcr.io/home-assistant/home-assistant:2024.6
     container_name: homeassistant
     restart: unless-stopped
     privileged: false
@@ -86,7 +86,7 @@ services:
   # Port: 1883
   # To add user, in container: mosquitto_passwd -b /mosquitto/config/mqttuser username password
   homeassistant-mqtt:
-    image: eclipse-mosquitto:2.0
+    image: eclipse-mosquitto:2.0.18
     container_name: homeassistant-mqtt
     restart: unless-stopped
     # network_mode: "container:homeassistant"
@@ -102,7 +102,7 @@ services:
 
   # Port: 6052
   homeassistant-esphome:
-    image: ghcr.io/esphome/esphome:2024.2
+    image: ghcr.io/esphome/esphome:2024.5
     container_name: homeassistant-esphome
     restart: unless-stopped
     networks:
@@ -126,7 +126,7 @@ services:
 
   # Port: 8080
   homeassistant-zigbee2mqtt:
-    image: koenkk/zigbee2mqtt:1.36.0
+    image: koenkk/zigbee2mqtt:1.38.0
     container_name: homeassistant-zigbee2mqtt
     restart: unless-stopped
     networks:
@@ -150,7 +150,7 @@ services:
       - ${nfsvols}/hass/zigbee2mqtt:/app/data
 
   grafana:
-    image: grafana/grafana-enterprise:10.2.4
+    image: grafana/grafana-enterprise:10.2.7
     container_name: grafana
     restart: unless-stopped
     privileged: false

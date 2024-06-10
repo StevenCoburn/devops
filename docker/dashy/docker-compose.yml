@@ -7,9 +7,9 @@ networks:
     name: traefik-internal
 
 services:
-  # Port: 80
+  # Port: 8080
   dashy:
-    image: ghcr.io/lissy93/dashy:2.1.1
+    image: ghcr.io/lissy93/dashy:3.1.0
     container_name: dashy
     restart: unless-stopped
     privileged: false
@@ -19,18 +19,18 @@ services:
       UID: ${NFS_PUID}
       GID: ${NFS_PGID}
     volumes:
-      - ${nfsvols}/dashy/conf.yml:/app/public/conf.yml
-      - ${nfsvols}/dashy/icons:/app/public/item-icons
-      - ${nfsvols}/dashy/JetBrainsMono-Regular.ttf:/app/public/fonts/JetBrainsMono-Regular.ttf
-      - ${nfsvols}/dashy/favicon.ico:/app/dist/favicon.ico
-      - ${nfsvols}/dashy/favicon.ico:/app/dist/img/icons/favicon-16x16.png
-      - ${nfsvols}/dashy/favicon.ico:/app/dist/img/icons/apple-touch-icon-152x152.png
+      - ${nfsvols}/dashy/conf.yml:/app/user-data/conf.yml
+      - ${nfsvols}/dashy/icons:/app/user-data/item-icons
+      - ${nfsvols}/dashy/JetBrainsMono-Regular.ttf:/app/user-data/fonts/JetBrainsMono-Regular.ttf
+      # - ${nfsvols}/dashy/favicon.ico:/app/dist/favicon.ico
+      # - ${nfsvols}/dashy/favicon.ico:/app/dist/img/icons/favicon-16x16.png
+      # - ${nfsvols}/dashy/favicon.ico:/app/dist/img/icons/apple-touch-icon-152x152.png
     networks: [traefik-internal]
     labels:
       traefik.enable: true
       traefik.http.routers.dashy.tls: true
       traefik.http.routers.dashy.service: dashy
-      traefik.http.services.dashy.loadbalancer.server.port: 80
+      traefik.http.services.dashy.loadbalancer.server.port: 8080
       traefik.http.routers.dashy.rule: Host(`${DOMAIN}`)
       # traefik.http.routers.dashy.middlewares: authelia@docker
     healthcheck:
