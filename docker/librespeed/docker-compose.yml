@@ -1,16 +1,16 @@
 version: '3.8'
 
 networks:
-  traefik-internal:
+  internal-traefik:
     external: true
-    name: traefik-internal
+    name: internal-traefik
 
 services:
   speedtest:
     image: ghcr.io/linuxserver/librespeed:latest
     container_name: librespeed
     restart: unless-stopped
-    networks: [traefik-internal]
+    networks: [internal-traefik]
     security_opt: [no-new-privileges:true]
     labels:
       traefik.enable: true

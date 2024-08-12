@@ -5,9 +5,9 @@ volumes:
     name: mealie
 
 networks:
-  traefik:
-    name: traefik
+  external-traefik:
     external: true
+    name: external-traefik
 
 services:
   mealie:
@@ -16,7 +16,7 @@ services:
     restart: always
     privileged: false
     security_opt: [no-new-privileges:true]
-    networks: [traefik]
+    networks: [external-traefik]
     volumes:
       - mealie:/app/data/
     environment:

@@ -5,7 +5,7 @@ volumes:
     name: frigate-db
 
 networks:
-  iot:
+  internal-iot-vlan:
     name: ${iot_net_name}
     driver: macvlan
     driver_opts:
@@ -15,10 +15,10 @@ networks:
       config:
         - subnet: ${iot_net_subnet}
           gateway: ${iot_net_gateway}
-  homeassistant-internal:
-    external: false
+  internal-homeassistant:
+    external: true
     internal: true
-    name: homeassistant-internal
+    name: internal-homeassistant
 
 services:
   frigate:
@@ -41,9 +41,9 @@ services:
     #   - "8555:8555/tcp" # WebRTC over tcp
     #   - "8555:8555/udp" # WebRTC over udp
     networks:
-      iot:
+      internal-iot-vlan:
         ipv4_address: ${frigate_ip}
-      homeassistant-internal:
+      internal-homeassistant:
     environment:
       TZ: ${TZ}
       NVIDIA_VISIBLE_DEVICES: nvidia.com/gpu=0
@@ -51,6 +51,8 @@ services:
       FRIGATE_RTSP_PASSWORD: ${frigate_rtsp_password}
       FRIGATE_MQTT_USER: frigate
       FRIGATE_MQTT_PASSWORD: ${frigate_mqtt_password}
+    # devices:
+    #   - /dev/apex_0:/dev/apex_0 # passes a PCIe Coral
     deploy:
       resources:
         reservations:

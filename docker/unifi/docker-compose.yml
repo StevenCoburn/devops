@@ -1,12 +1,9 @@
 version: '3.8'
 
 networks:
-  internet-bridge:
+  external-traefik:
     external: true
-    name: internet-bridge
-  traefik-internal:
-    external: true
-    name: traefik-internal
+    name: external-traefik
 
 services:
   unifi:
@@ -18,7 +15,7 @@ services:
     security_opt: [no-new-privileges:true]
     volumes:
       - ${nfsvols}/UniFi-Data:/config
-    networks: [internet-bridge, traefik-internal]
+    networks: [external-traefik]
     ports:
      - 3478:3478/udp
      - 8080:8080

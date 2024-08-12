@@ -5,9 +5,9 @@ volumes:
     name: portainer
 
 networks:
-  traefik-internal:
+  internal-traefik:
     external: true
-    name: traefik-internal
+    name: internal-traefik
 
 services:
   containers:
@@ -16,7 +16,7 @@ services:
     restart: always
     privileged: false
     security_opt: [no-new-privileges:true]
-    networks: [traefik-internal]
+    networks: [internal-traefik]
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - portainer:/data
