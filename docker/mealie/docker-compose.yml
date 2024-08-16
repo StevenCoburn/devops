@@ -1,27 +1,24 @@
 version: '3.8'
 
-volumes:
-  mealie:
-    name: mealie
-
 networks:
   external-traefik:
     external: true
     name: external-traefik
+  internal-mealie:
+    name: internal-mealie
 
 services:
   mealie:
-    image: ghcr.io/mealie-recipes/mealie:v1.8.0
+    image: ghcr.io/mealie-recipes/mealie:v1.11.0
     container_name: mealie
     restart: always
     privileged: false
     security_opt: [no-new-privileges:true]
-    networks: [external-traefik]
+    networks: [external-traefik, internal-mealie]
     volumes:
-      - mealie:/app/data/
+      - ${nfsvols}/mealie/appdata:/app/data/
     environment:
       BASE_URL: https://recipes.${DOMAIN}
-      DB_ENGINE: sqlite
       TOKEN_TIME: 4
       MAX_WORKERS: 4
       ALLOW_SIGNUP: false
@@ -29,6 +26,14 @@ services:
       # PGID: ${NFS_PGID}
       TZ: ${TZ}
       WEB_CONCURRENCY: 1
+      DB_ENGINE: postgres
+      POSTGRES_SERVER: mealie-db
+      POSTGRES_DB: mealie
+      POSTGRES_USER: mealie
+      POSTGRES_PASSWORD: ${MEALIE_DB_PASSWORD}
+    depends_on:
+      mealie-db:
+        condition: service_healthy
     labels:
       traefik.enable: true
       traefik.http.routers.mealie.tls: true
@@ -36,3 +41,22 @@ services:
       traefik.http.services.mealie.loadbalancer.server.port: 9000
       traefik.http.routers.mealie.middlewares: secure-headers@file,rateLimit@file
       traefik.http.routers.mealie.rule: Host(`recipes.${DOMAIN}`)
+
+  mealie-db:
+    container_name: mealie-db
+    image: postgres:15
+    restart: always
+    privileged: false
+    security_opt: [no-new-privileges:true]
+    networks: [internal-mealie]
+    volumes:
+      - ${nfsvols}/mealie/db:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: mealie
+      POSTGRES_USER: mealie
+      POSTGRES_PASSWORD: ${MEALIE_DB_PASSWORD}
+    healthcheck:
+      test: pg_isready -U $$POSTGRES_USER
+      interval: 30s
+      timeout: 20s
+      retries: 3
