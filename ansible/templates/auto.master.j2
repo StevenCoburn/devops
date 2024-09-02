@@ -1,5 +1,7 @@
 # Direct Mapping
-/-    /etc/auto.maps
+/-    /etc/auto-direct.maps
 
 # Indirect Mapping
-{{ nfs_indirect_map.clientPath }}    /etc/auto.maps
+{% for indirect in nfs_indirect_map %}
+{{ indirect.clientPath }}    /etc/auto-{{ indirect.clientPath | basename }}.maps
+{% endfor %}

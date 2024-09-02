@@ -1,3 +1,4 @@
+# Must create a serial port in Proxmox to appease systemd-vconsole-setup.service
 ---
 - hosts: "coreos"
   gather_facts: false
@@ -158,24 +159,33 @@
         enabled: true
 
     - name: "AutoFS - Copy master template"
-      ansible.builtin.template: 
+      ansible.builtin.template:
         dest: "/etc/auto.master"
         force: true
         src: "../templates/auto.master.j2"
       register: autofs_master
 
-    - name: "AutoFS - Copy maps template"
-      ansible.builtin.template: 
-        dest: "/etc/auto.maps"
+    - name: "AutoFS - Copy direct map template"
+      ansible.builtin.template:
+        dest: "/etc/auto-direct.maps"
         force: true
-        src: "../templates/auto.maps.j2"
-      register: autofs_maps
+        src: "../templates/auto-direct.maps.j2"
+      register: autofs_direct
+
+    - name: "AutoFS - Copy indirect maps template"
+      ansible.builtin.template:
+        dest: "/etc/auto-{{ item.clientPath | basename }}.maps"
+        force: true
+        src: "../templates/auto-indirect.maps.j2"
+      loop: "{{ nfs_indirect_map }}"
+      loop_control: { label: "{{ item.clientPath | basename }}" }
+      register: autofs_indirect
 
     - name: "AutoFS - Enable and start the service"
       ansible.builtin.systemd_service:
         enabled: true
         name: "autofs.service"
-        state: "{{ 'reloaded' if autofs_master.changed or autofs_maps.changed else 'started' }}"
+        state: "{{ 'reloaded' if autofs_master.changed or autofs_direct.changed or autofs_indirect.changed else 'started' }}"
 
     - ansible.builtin.import_tasks: "../tasks/configure_users.yml"
     - ansible.builtin.import_tasks: "../tasks/configure_docker.yml"
