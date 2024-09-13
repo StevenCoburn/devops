@@ -1,16 +1,28 @@
 # Must create a serial port in Proxmox to appease systemd-vconsole-setup.service
 ---
-- hosts: "coreos"
+- name: "CoreOS configuration playbook"
+  hosts: "coreos"
   gather_facts: false
   become: true
+
+  handlers:
+    - name: "Reboot Server"
+      ansible.builtin.reboot:
+
+    - name: "Reload Docker service"
+      ansible.builtin.systemd_service:
+        name: "docker.service"
+        state: "restarted"
+
   pre_tasks:
-    - ansible.builtin.import_tasks: "../tasks/load_ssh_key.yml"
-      tags: always
+    - name: "Preload Ansible SSH Key"
+      tags: "always"
+      ansible.builtin.import_tasks: "../tasks/load_ssh_key.yml"
 
   tasks:
     # Gather facts now that we've loaded the SSH key
     - name: "Gathering Facts"
-      tags: always
+      tags: "always"
       ansible.builtin.setup:
 
     - name: "Zincati - Set update wariness"
@@ -43,7 +55,7 @@
           ConditionVirtualization=kvm
 
           [Service]
-          ExecStartPre=-docker rm -fv qemu-ga
+          ExecStartPre=docker rm -fv qemu-ga
           ExecStart=docker run --name qemu-ga --privileged --net=host -v /dev:/dev -v /etc/os-release:/etc/os-release:ro docker.io/danskadra/qemu-ga qemu-ga
 
           [Install]
@@ -57,7 +69,7 @@
         state: "started"
         enabled: true
 
-    - name: "Install rpm-ostree packages (phase 1 of 2)"
+    - name: "Install rpm-ostree packages"
       community.general.rpm_ostree_pkg:
         name:
           - "autofs"
@@ -67,116 +79,123 @@
           # RPM Fusion repos
           - "https://download1.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-{{ ansible_distribution_major_version }}.noarch.rpm"
           - "https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-{{ ansible_distribution_major_version }}.noarch.rpm"
-          # Optional utils for GPU stuff
-          - "python3-pip"
-          - "pciutils" # lspci
-          - "lshw"
-          - "nvtop"
-      register: rpms_installed_phase_1
+      notify: "Reboot Server"
 
-    - name: "Nvidia - Add the nvidia-container-toolkit repo"
-      ansible.builtin.get_url:
-        dest: "/etc/yum.repos.d/nvidia-container-toolkit.repo"
-        mode: "0644"
-        url: "https://nvidia.github.io/libnvidia-container/stable/rpm/nvidia-container-toolkit.repo"
+    - name: "Run handlers"
+      ansible.builtin.meta: flush_handlers
 
-    - name: "Reboot if rpm-ostree installed packages"
-      ansible.builtin.reboot:
-      when: rpms_installed_phase_1.changed
+    - name: "Nvidia-specific installation"
+      tags: ["never", "nvidia"]
+      block:
+        - name: "Add the nvidia-container-toolkit repo"
+          ansible.builtin.get_url:
+            dest: "/etc/yum.repos.d/nvidia-container-toolkit.repo"
+            mode: "0644"
+            url: "https://nvidia.github.io/libnvidia-container/stable/rpm/nvidia-container-toolkit.repo"
 
-    - name: "Nvidia - Install pip packages"
-      ansible.builtin.pip:
-        name: gpustat
+        - name: "Install GPU-related rpm-ostree packages"
+          community.general.rpm_ostree_pkg:
+            name:
+              # Nvidia drivers
+              - "akmod-nvidia"
+              - "xorg-x11-drv-nvidia-cuda"
+              - "nvidia-container-toolkit"
+              # Utils useful for Nvidia GPU stuff
+              - "python3-pip"
+              - "pciutils" # lspci
+              - "lshw"
+              - "nvtop"
+          notify: "Reboot Server"
 
-    - name: "Nvidia - Install rpm-ostree packages"
-      community.general.rpm_ostree_pkg:
-        name:
-          - "akmod-nvidia"
-          - "xorg-x11-drv-nvidia-cuda"
-          - "nvidia-container-toolkit"
-      register: rpms_installed_phase_2
+        - name: "Run handlers"
+          ansible.builtin.meta: flush_handlers
 
-    - name: "Reboot if rpm-ostree installed packages"
-      ansible.builtin.reboot:
-      when: rpms_installed_phase_2.changed
+        - name: "Install pip packages"
+          ansible.builtin.pip:
+            name: gpustat
 
-    - name: "Nvidia - Disable the nvidia-powerd service"
-      ansible.builtin.systemd_service:
-        enabled: false
-        name: "nvidia-powerd.service"
-      register: nvidia_disable
+        - name: "Disable the nvidia-powerd service"
+          ansible.builtin.systemd_service:
+            enabled: false
+            name: "nvidia-powerd.service"
+          notify: "Reboot Server"
 
-    - name: "Nvidia - Get stats on /etc/cdi/nvidia.yaml"
-      ansible.builtin.stat:
-        path: "/etc/cdi/nvidia.yaml"
-      register: nvidia_cdi_config
+        - name: "Run handlers"
+          ansible.builtin.meta: flush_handlers
 
-    - name: "Nvidia - Generate Nvidia CDI config"
-      ansible.builtin.command: "nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml"
-      when: nvidia_cdi_config.stat.exists is defined and not nvidia_cdi_config.stat.exists
+        - name: "Get stats on /etc/cdi/nvidia.yaml"
+          ansible.builtin.stat:
+            path: "/etc/cdi/nvidia.yaml"
+          register: nvidia_cdi_config
 
-    - name: "Nvidia - Verify the Nvidia CDI config"
-      ansible.builtin.command: "nvidia-ctk cdi list"
-      changed_when: false
-      failed_when: "'nvidia.com/gpu=0' not in nvidia_cdi_verify.stdout"
-      register: nvidia_cdi_verify
+        - name: "Generate Nvidia CDI config"
+          ansible.builtin.command: "nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml"
+          changed_when: false
+          when: nvidia_cdi_config.stat.exists is defined and not nvidia_cdi_config.stat.exists
 
-    - name: "Nvidia - Check Nvidia config in /etc/docker/daemon.json"
-      ansible.builtin.command: grep -q nvidia-container-runtime /etc/docker/daemon.json
-      register: nvidia_docker_config
-      changed_when: nvidia_docker_config.rc in [1, 2]
-      failed_when: nvidia_docker_config.rc not in [0, 1, 2]
+        - name: "Verify the Nvidia CDI config"
+          ansible.builtin.command: "nvidia-ctk cdi list"
+          changed_when: false
+          failed_when: "'nvidia.com/gpu=0' not in nvidia_cdi_verify.stdout"
+          register: nvidia_cdi_verify
 
-    - name: "Nvidia - Generate Nvidia Docker config"
-      ansible.builtin.command: "nvidia-ctk runtime configure --runtime=docker"
-      register: nvidia_docker_config_generated
-      when: nvidia_docker_config.changed
+        - name: "Check Nvidia config in /etc/docker/daemon.json"
+          ansible.builtin.command: grep -q nvidia-container-runtime /etc/docker/daemon.json
+          register: nvidia_docker_config
+          changed_when: nvidia_docker_config.rc in [1, 2]
+          failed_when: nvidia_docker_config.rc not in [0, 1, 2]
 
-    - name: "Nvidia - Reload Docker service"
-      ansible.builtin.systemd_service:
-        name: "docker.service"
-        state: "restarted"
-      when: nvidia_docker_config_generated.changed
+        - name: "Generate Nvidia Docker config"
+          ansible.builtin.command: "nvidia-ctk runtime configure --runtime=docker"
+          notify: "Reload Docker service"
+          register: nvidia_docker_config_generated
+          when: nvidia_docker_config.changed
 
-    - name: "Nvidia - Create systemd task to generate CTK config at boot"
-      ansible.builtin.copy:
-        content: |
-          [Unit]
-          Description=Nvidia CDI Config Generator
+        - name: "Run handlers"
+          ansible.builtin.meta: flush_handlers
 
-          [Service]
-          Type=oneshot
-          ExecStart=nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml
+        - name: "Create systemd task to generate CTK config at boot"
+          ansible.builtin.copy:
+            content: |
+              [Unit]
+              Description=Nvidia CDI Config Generator
 
-          [Install]
-          WantedBy=multi-user.target docker.socket
-        dest: "/etc/systemd/system/nvidia-cdi-gen.service"
-        mode: "0644"
+              [Service]
+              Type=oneshot
+              ExecStart=nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml
 
-    - name: "Enable Nvidia CDI generation task"
-      ansible.builtin.systemd_service:
-        name: "nvidia-cdi-gen.service"
-        enabled: true
+              [Install]
+              WantedBy=multi-user.target docker.socket
+            dest: "/etc/systemd/system/nvidia-cdi-gen.service"
+            mode: "0644"
+
+        - name: "Enable Nvidia CDI generation task"
+          ansible.builtin.systemd_service:
+            name: "nvidia-cdi-gen.service"
+            enabled: true
 
     - name: "AutoFS - Copy master template"
       ansible.builtin.template:
         dest: "/etc/auto.master"
         force: true
-        src: "../templates/auto.master.j2"
+        mode: "0644"
+        src: "{{ inventory_dir }}/templates/auto.master.j2"
       register: autofs_master
 
     - name: "AutoFS - Copy direct map template"
       ansible.builtin.template:
         dest: "/etc/auto-direct.maps"
         force: true
-        src: "../templates/auto-direct.maps.j2"
+        mode: "0644"
+        src: "{{ inventory_dir }}/templates/auto-direct.maps.j2"
       register: autofs_direct
 
     - name: "AutoFS - Copy indirect maps template"
       ansible.builtin.template:
         dest: "/etc/auto-{{ item.clientPath | basename }}.maps"
         force: true
-        src: "../templates/auto-indirect.maps.j2"
+        mode: "0644"
+        src: "{{ inventory_dir }}/templates/auto-indirect.maps.j2"
       loop: "{{ nfs_indirect_map }}"
       loop_control: { label: "{{ item.clientPath | basename }}" }
       register: autofs_indirect
@@ -187,24 +206,32 @@
         name: "autofs.service"
         state: "{{ 'reloaded' if autofs_master.changed or autofs_direct.changed or autofs_indirect.changed else 'started' }}"
 
-    - ansible.builtin.import_tasks: "../tasks/configure_users.yml"
-    - ansible.builtin.import_tasks: "../tasks/configure_docker.yml"
-    - ansible.builtin.import_tasks: "../tasks/configure_networking.yml"
-    - ansible.builtin.import_tasks: "../tasks/configure_ssh.yml"
+    - name: "Import the users playbook"
+      ansible.builtin.import_tasks: "../tasks/configure_users.yml"
+
+    - name: "Import the Docker playbook"
+      ansible.builtin.import_tasks: "../tasks/configure_docker.yml"
+
+    - name: "Import the networking playbook"
+      ansible.builtin.import_tasks: "../tasks/configure_networking.yml"
+
+    - name: "Import the SSH playbook"
+      ansible.builtin.import_tasks: "../tasks/configure_ssh.yml"
 
     - name: "Unmonitored reboot"
-      shell: "sleep 5 && reboot"
+      ansible.builtin.shell: "sleep 5 && reboot"
       async: 1
+      changed_when: false
       poll: 0
       args:
         executable: "/bin/bash"
-      when: nvidia_disable.changed or
-            update_eth_name.changed or
+      when: update_eth_name.changed or
             created_server_vlan.changed or
             created_storage_vlan.changed or
             disable_primary_interface.changed
 
   post_tasks:
-    - ansible.builtin.import_tasks: "../tasks/unload_ssh_key.yml"
+    - name: "Unload Ansible SSH Key"
       tags: always
+      ansible.builtin.import_tasks: "../tasks/unload_ssh_key.yml"
 ...
