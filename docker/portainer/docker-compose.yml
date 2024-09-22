@@ -4,11 +4,6 @@ volumes:
   portainer:
     name: portainer
 
-networks:
-  internal-traefik:
-    external: true
-    name: internal-traefik
-
 services:
   containers:
     image: portainer/portainer-ce:latest
@@ -16,13 +11,9 @@ services:
     restart: always
     privileged: false
     security_opt: [no-new-privileges:true]
-    networks: [internal-traefik]
+    network_mode: bridge
+    ports:
+      - 9000:9000
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - portainer:/data
-    labels:
-      traefik.enable: true
-      traefik.http.routers.portainer.tls: true
-      traefik.http.routers.portainer.service: portainer
-      traefik.http.services.portainer.loadbalancer.server.port: 9000
-      traefik.http.routers.portainer.middlewares: secure-headers@file,rateLimit@file

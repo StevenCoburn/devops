@@ -1,20 +1,11 @@
 version: '3.8'
 
-networks:
-  internal-traefik:
-    external: true
-    name: internal-traefik
-
 services:
   speedtest:
     image: ghcr.io/linuxserver/librespeed:latest
     container_name: librespeed
     restart: unless-stopped
-    networks: [internal-traefik]
     security_opt: [no-new-privileges:true]
-    labels:
-      traefik.enable: true
-      traefik.http.routers.librespeed.tls: true
-      traefik.http.routers.librespeed.service: librespeed
-      traefik.http.services.librespeed.loadbalancer.server.port: 80
-      traefik.http.routers.librespeed.middlewares: secure-headers@file,rateLimit@file
+    network_mode: bridge
+    ports:
+      - 8082:80

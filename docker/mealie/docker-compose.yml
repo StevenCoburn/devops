@@ -1,9 +1,8 @@
 version: '3.8'
 
 networks:
-  external-traefik:
-    external: true
-    name: external-traefik
+  external-bridge:
+    name: external-bridge
   internal-mealie:
     name: internal-mealie
 
@@ -14,7 +13,9 @@ services:
     restart: always
     privileged: false
     security_opt: [no-new-privileges:true]
-    networks: [external-traefik, internal-mealie]
+    networks: [external-bridge, internal-mealie]
+    ports:
+      - 9001:9000
     volumes:
       - ${nfsvols}/mealie/appdata:/app/data/
     environment:
@@ -34,13 +35,6 @@ services:
     depends_on:
       mealie-db:
         condition: service_healthy
-    labels:
-      traefik.enable: true
-      traefik.http.routers.mealie.tls: true
-      traefik.http.routers.mealie.service: mealie
-      traefik.http.services.mealie.loadbalancer.server.port: 9000
-      traefik.http.routers.mealie.middlewares: secure-headers@file,rateLimit@file
-      traefik.http.routers.mealie.rule: Host(`recipes.${DOMAIN}`)
 
   mealie-db:
     container_name: mealie-db

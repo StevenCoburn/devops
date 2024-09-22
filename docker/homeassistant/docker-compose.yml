@@ -15,9 +15,8 @@ networks:
       config:
         - subnet: ${home_net_subnet}
           gateway: ${home_net_gateway}
-  external-traefik:
-    external: true
-    name: external-traefik
+  external-bridge:
+    name: external-bridge
   internal-homeassistant:
     external: false
     internal: true
@@ -49,16 +48,9 @@ services:
       # external-home-vlan must be first for Apple Home to work
       external-home-vlan:
         ipv4_address: ${homeassistant_home_ip}
-      external-traefik:
       internal-iot-vlan:
         ipv4_address: ${homeassistant_iot_ip}
       internal-homeassistant:
-    labels:
-      traefik.enable: true
-      traefik.http.routers.homeassistant.tls: true
-      traefik.http.routers.homeassistant.service: homeassistant
-      traefik.http.services.homeassistant.loadbalancer.server.port: 8123
-      traefik.docker.network: external-traefik
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8123"]
       interval: 30s
@@ -94,29 +86,23 @@ services:
       - ${nfsvols}/hass/mqtt/data:/mosquitto/data
       - ${nfsvols}/hass/mqtt/log:/mosquitto/log
 
-  # Port: 6052
   homeassistant-esphome:
     image: ghcr.io/esphome/esphome:2024.7
     container_name: homeassistant-esphome
     restart: unless-stopped
     networks:
-      # external-traefik must be first because it needs internet access to download resources
-      external-traefik:
+      # internet-capable network must be first to download resources
+      external-bridge:
       internal-iot-vlan:
         ipv4_address: ${esphome_ip}
+    ports:
+      - 6052:6052
     privileged: false
     security_opt: [no-new-privileges:true]
     environment:
       ESPHOME_DASHBOARD_USE_PING: true
       USERNAME: ${ESPHOME_USER}
       PASSWORD: ${ESPHOME_PASSWORD}
-    labels:
-      traefik.enable: true
-      traefik.http.routers.esphome.tls: true
-      traefik.http.routers.esphome.service: esphome
-      traefik.http.services.esphome.loadbalancer.server.port: 6052
-      traefik.http.routers.esphome.rule: Host(`esphome.${DOMAIN}`)
-      traefik.docker.network: external-traefik
     volumes:
       - ${nfsvols}/hass/esphome:/config
 
@@ -126,8 +112,7 @@ services:
     container_name: homeassistant-zigbee2mqtt
     restart: unless-stopped
     networks:
-      # external-traefik must be first because if I want Z2M to search for firmeware updates
-      external-traefik:
+      # internet-capable network must be first if I want Z2M to search for firmeware updates
       internal-homeassistant:
       internal-iot-vlan:
         ipv4_address: ${zigbee2mqtt_ip}
@@ -136,13 +121,6 @@ services:
     security_opt: [no-new-privileges:true]
     environment:
       TZ: ${TZ}
-    labels:
-      traefik.enable: true
-      traefik.http.routers.zigbee2mqtt.tls: true
-      traefik.http.routers.zigbee2mqtt.service: zigbee2mqtt
-      traefik.http.services.zigbee2mqtt.loadbalancer.server.port: 8080
-      traefik.http.routers.zigbee2mqtt.rule: Host(`zigbee2mqtt.${DOMAIN}`)
-      traefik.docker.network: external-traefik
     volumes:
       - ${nfsvols}/hass/zigbee2mqtt:/app/data
 

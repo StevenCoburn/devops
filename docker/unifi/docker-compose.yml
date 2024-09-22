@@ -1,10 +1,5 @@
 version: '3.8'
 
-networks:
-  external-traefik:
-    external: true
-    name: external-traefik
-
 services:
   unifi:
     image: linuxserver/unifi-controller:latest
@@ -15,10 +10,11 @@ services:
     security_opt: [no-new-privileges:true]
     volumes:
       - ${nfsvols}/UniFi-Data:/config
-    networks: [external-traefik]
+    network_mode: bridge
     ports:
-     - 3478:3478/udp
-     - 8080:8080
+      - 3478:3478/udp # STUN
+      - 8080:8080 # device-to-controller communication
+      - 8443:8443 # web ui
     environment:
       - PUID=${NFS_PUID}
       - PGID=${NFS_PGID}
@@ -27,12 +23,3 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
-    labels:
-      traefik.enable: true
-      traefik.http.routers.unifi.tls: true
-      traefik.http.routers.unifi.service: unifi
-      traefik.http.services.unifi.loadbalancer.server.port: 8443
-      traefik.http.services.unifi.loadbalancer.server.scheme: https
-      # Default rate limiting blocks unifi, it's quite noisy
-      traefik.http.routers.unifi.middlewares: unifiHeaders@file
-      traefik.http.routers.unifi.rule: "Host(`unifi.${DOMAIN}`) || Host(`unifi`)"
