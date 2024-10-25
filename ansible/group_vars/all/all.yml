@@ -2,5 +2,4 @@
 # Set host_domain var to the domain search domain in your environment
 ansible_host: "{{inventory_hostname}}.{{host_domain}}"
 any_errors_fatal: true
-infrastructure: "NotSet"
 ...

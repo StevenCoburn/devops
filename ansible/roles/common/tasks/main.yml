@@ -1,0 +1,132 @@
+---
+##########################
+###### User Section ######
+##########################
+- name: "Randomize ansible user password so only key authentication can be used"
+  ansible.builtin.user:
+    name: "{{ ansible_user }}"
+    password: "{{ lookup('password', '/dev/null length=32 seed=inventory_hostname') }}"
+    password_lock: true
+
+- name: "Configure User '{{ admin_user.name }}'"
+  ansible.builtin.user:
+    append: true
+    groups: "{{ admin_user.groups }}"
+    name: "{{ admin_user.name }}"
+    # password: "{{ lookup('password', '../credentials/' + ansible_hostname + '/' + item.name + '/password.txt encrypt=md5_crypt') }}"
+    shell: "/bin/bash"
+    state: "present"
+    uid: "{{ admin_user.uid }}"
+
+- name: "Add keys for '{{ admin_user.name }}'"
+  ansible.posix.authorized_key:
+    key: "{{ item }}"
+    state: "present"
+    user: "{{ admin_user.name }}"
+  loop: "{{ ssh_pub_keys }}"
+  no_log: true
+
+- name: "Remove revoked keys for '{{ admin_user.name }}'"
+  ansible.posix.authorized_key:
+    key: "{{ item }}"
+    state: "absent"
+    user: "{{ admin_user.name }}"
+  loop: "{{ ssh_pub_keys_to_revoke }}"
+  no_log: true
+
+- name: "Check for oh-my-bash"
+  ansible.builtin.shell: "set -o pipefail && find /usr/local/share/oh-my-bash -name oh-my-bash.sh | grep -q ."
+  changed_when: false
+  failed_when: "oh_my_bash_installed.rc != 0 and 'No such file or directory' not in oh_my_bash_installed.stderr"
+  register: oh_my_bash_installed
+
+- name: "Download oh-my-bash installer"
+  ansible.builtin.get_url:
+    dest: "/tmp/oh-my-bash-install.sh"
+    mode: 'u+rwx'
+    url: "https://raw.githubusercontent.com/ohmybash/oh-my-bash/master/tools/install.sh"
+  when: oh_my_bash_installed.rc != 0
+  register: oh_my_bash_downloaded
+
+- name: "Run oh-my-bash install script"
+  ansible.builtin.shell: "/tmp/oh-my-bash-install.sh --prefix=/usr/local --unattended"
+  when: oh_my_bash_downloaded.changed
+
+- name: "Copy oh-my-bash .bashrc for '{{ admin_user.name }}'"
+  ansible.builtin.template:
+    dest: "/home/{{ admin_user.name }}/.bashrc"
+    force: true
+    group: "{{ admin_user.name }}"
+    mode: "0644"
+    owner: "{{ admin_user.name }}"
+    src: "templates/bashrc.j2"
+
+# This is not needed in Fedora CoreOS because a sodoers file exists making all sudo group passwordless
+- name: "No sudo password for '{{ admin_user.name }}'"
+  ansible.builtin.copy:
+    content: "{{ admin_user.name }}  ALL=(ALL)  NOPASSWD: ALL"
+    dest: "/etc/sudoers.d/{{ admin_user.name }}"
+    mode: "0440"
+  when:
+    - ansible_facts['os_family'] != "RedHat" or
+      ansible_facts['pkg_mgr'] != "atomic_container"
+
+#########################
+###### OCI Section ######
+#########################
+# OCI image gives a Ubuntu user that we only use to setup the Ansible user
+- name: "SSH - Remove default SSH key"
+  tags: ["oci", "never"]
+  ansible.posix.authorized_key:
+    user: "ubuntu"
+    state: "absent"
+    key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIt6Xfre05KU/vnKTTN07E0qG9n2nLVwgZQ7xZdw8IOp Ansible - 01FEB2023"
+
+- name: "SSH - Only listen on wg0 - Cloud Servers"
+  tags: ["oci", "never"]
+  ansible.builtin.replace:
+    path: "/etc/ssh/sshd_config"
+    regexp: '^(ListenAddress[ ]+)[^\n]+$'
+    replace: '\g<1>{{ wg_ip }}'
+
+- name: "SSH - Add wg0 as sshd dependency"
+  tags: ["oci", "never"]
+  ansible.builtin.blockinfile:
+    block: |
+      After=network.target wg-quick@wg0.service
+      Requires=sys-devices-virtual-net-wg0.device
+    insertafter: "\\[Unit\\]"
+    path: "/etc/systemd/system/sshd.service"
+
+##############################
+###### Software Section ######
+##############################
+- name: "Install additional packages"
+  when: ansible_facts['pkg_mgr'] != "atomic_container"
+  ansible.builtin.package:
+    state: "present"
+    name:
+      - "autofs"
+      - "bmon"
+      - "ca-certificates"
+      - "curl"
+      - "gnupg"
+      - "htop"
+      - "iftop"
+      - "lsb-release"
+      - "lshw"
+      - "{{ 'nfs-utils' if ansible_facts['pkg_mgr'] | lower == 'dnf' else 'nfs-common' }}"
+      - "sudo"
+      - "slurm"
+
+#########################
+###### SSH Section ######
+#########################
+- name: "Configure sshd"
+  ansible.builtin.template:
+    src: "templates/sshd_config.j2"
+    dest: "/etc/ssh/sshd_config"
+    mode: "0644"
+    validate: '/usr/sbin/sshd -T -f %s'
+  notify: "Reload sshd"
+...

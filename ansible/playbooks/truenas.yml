@@ -1,7 +1,0 @@
----
-- hosts: truenas
-
-  tasks:
-    - name: "Pinger"
-      ping:
-...

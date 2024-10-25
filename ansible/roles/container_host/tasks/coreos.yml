@@ -1,0 +1,37 @@
+---
+- name: "Zincati - Set update wariness"
+  ansible.builtin.copy:
+    content: |
+      [identity]
+      rollout_wariness = 0.5
+    dest: "/etc/zincati/config.d/51-rollout-wariness.toml"
+    mode: "0644"
+
+- name: "Zincati - Set update strategy"
+  ansible.builtin.copy:
+    content: |
+      [updates]
+      strategy = "periodic"
+      [[updates.periodic.window]]
+      days = [ "Sat" ]
+      start_time = "09:00"
+      length_minutes = 60
+    dest: "/etc/zincati/config.d/55-updates-strategy.toml"
+    mode: "0644"
+
+# This should be taken care of in main.yml once I figure out how to reboot only if coreos
+- name: "Install rpm-ostree packages"
+  community.general.rpm_ostree_pkg:
+    name:
+      - "autofs"
+      - "bmon"
+      - "htop"
+      - "iftop"
+      # RPM Fusion repos - Only useful for Nvidia drivers
+      # - "https://download1.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-{{ ansible_distribution_major_version }}.noarch.rpm"
+      # - "https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-{{ ansible_distribution_major_version }}.noarch.rpm"
+  notify: "Reboot Server"
+
+- name: "Run handlers"
+  ansible.builtin.meta: flush_handlers
+...

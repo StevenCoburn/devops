@@ -14,7 +14,7 @@
 
 ---
 - name: "Workstation Setup"
-  hosts: workstation_redhat
+  hosts: "workstation_redhat"
 
   # These variables need updated occasionally to keep this playbook current
   vars:
@@ -72,13 +72,6 @@
         name:
           - "https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-{{ ansible_distribution_version }}.noarch.rpm"
           - "https://download1.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-{{ ansible_distribution_version }}.noarch.rpm"
-      become: true
-
-    - name: "Upgrade all dnf packages"
-      ansible.builtin.dnf:
-        name: "*"
-        state: "latest"
-        update_cache: true
       become: true
 
     # Do NOT use Flatpak version of RDMFree, modify debian version if needed
@@ -233,7 +226,7 @@
       ansible.builtin.copy:
         dest: "/boot/efi/EFI/refind/refind.conf"
         mode: "0700"
-        src: "../templates/refind.conf"
+        src: "{{ inventory_dir }}/templates/refind.conf"
       become: true
       when: refind_dir.changed
 
@@ -441,7 +434,7 @@
       ansible.builtin.copy:
         dest: "{{ ansible_user_dir }}/.p10k.zsh"
         mode: "0644"
-        src: "../templates/p10k.zsh"
+        src: "{{ inventory_dir }}/templates/p10k.zsh"
 
     - name: "Check if reboot-requied file exists"
       ansible.builtin.stat:

@@ -1,0 +1,35 @@
+# Playbooks require specific ansible user with SSH key
+
+# Create the ansible user as part of initial user creation, enable SSH, then:
+# mkdir -m 0700 -p ~/.ssh
+# echo 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE0KPODnkXEBkk6JV7oMQDXaqcaAFIWhmRrgZAPGWNJU Ansible - 01SEP2023' | tee ~/.ssh/authorized_keys >/dev/null
+# echo "$USER ALL=(ALL) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/ansible >/dev/null
+
+# Change the hosts and the roles before running this playbook
+# Can also be used as a template for a standard playbook - just add a "tasks" section
+
+---
+- name: "Playbook to deploy roles to hosts"
+  hosts: "all"
+  gather_facts: false
+  become: true
+
+  roles:
+    - common
+    - container_host
+
+  pre_tasks:
+    - name: "Preload Ansible SSH Key"
+      tags: "always"
+      ansible.builtin.import_tasks: "tasks/load_ssh_key.yml"
+
+    # Gather facts now that we've loaded the SSH key
+    - name: "Gathering Facts"
+      tags: "always"
+      ansible.builtin.setup:
+
+  post_tasks:
+    - name: "Unload Ansible SSH Key"
+      tags: always
+      ansible.builtin.import_tasks: "tasks/unload_ssh_key.yml"
+...

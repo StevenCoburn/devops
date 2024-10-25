@@ -1,0 +1,42 @@
+---
+- name: "Update the OS"
+  hosts: "all"
+  gather_facts: false
+  become: true
+
+  handlers:
+    - name: "Reboot"
+      ansible.builtin.reboot:
+
+  pre_tasks:
+    - name: "Preload Ansible SSH Key"
+      tags: "always"
+      ansible.builtin.import_tasks: "tasks/load_ssh_key.yml"
+
+    # Gather facts now that we've loaded the SSH key
+    - name: "Gathering Facts"
+      tags: "always"
+      ansible.builtin.setup:
+
+  tasks:
+    - name: "Update apt cache"
+      ansible.builtin.apt:
+        update_cache: true
+      when: ansible_pkg_mgr == "apt"
+
+    - name: "Update dnf cache"
+      ansible.builtin.dnf:
+        update_cache: true
+      when: ansible_pkg_mgr == "dnf"
+
+    - name: "Upgrade all packages"
+      ansible.builtin.package:
+        state: "latest"
+        name: "*"
+      notify: "Reboot"
+
+  post_tasks:
+    - name: "Unload Ansible SSH Key"
+      tags: always
+      ansible.builtin.import_tasks: "tasks/unload_ssh_key.yml"
+...

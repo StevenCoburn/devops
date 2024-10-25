@@ -1,9 +1,3 @@
-# Setup process:
-# - Install Proxmox with ZFS
-# - Add Ansible SSH key to the root authorized_keys
-# - Run this playbook
-# - Add to cluster
-
 # Initial cluster creation OR single-node operation
 # - Manually modify the /etc/pve/storage.cfg to add networked storage
 
@@ -11,6 +5,9 @@
 - name: "Proxmox VE Setup"
   hosts: "pve"
   gather_facts: false
+
+  roles:
+    - common
 
   vars_prompt:
     - name: "safe_to_reboot"
@@ -34,16 +31,16 @@
       register: pve_efitool_status
 
   pre_tasks:
-    - name: "Load SSH Key"
+    - name: "Preload Ansible SSH Key"
       tags: "always"
-      ansible.builtin.import_tasks: "../tasks/load_ssh_key.yml"
+      ansible.builtin.import_tasks: "tasks/load_ssh_key.yml"
 
-  tasks:
     # Gather facts now that we've loaded the SSH key
     - name: "Gathering Facts"
       tags: "always"
       ansible.builtin.setup:
 
+  tasks:
     - name: "Change root password"
       ansible.builtin.user:
         name: "root"
@@ -79,15 +76,10 @@
     - name: "Update apt cache and install some additional packages"
       ansible.builtin.apt:
         name:
-          - "bmon"
-          - "htop"
-          - "iftop"
           - "ifupdown2"
           - "ipmitool"
           - "lm-sensors"
-          - "lshw"
           - "net-tools"
-          - "slurm"
         update_cache: true
 
     - name: "Install intel-firmware for MS-01 hardware"
@@ -96,7 +88,8 @@
       when: ansible_system_vendor == 'Micro Computer (HK) Tech Limited'
 
     - name: "Update software using the OS package manager"
-      ansible.builtin.import_tasks: "../tasks/update_software.yml"
+      ansible.builtin.import_playbook:
+        playbook: "os_update_playbook.yml"
 
     - name: "Add authorized SSH keys"
       ansible.posix.authorized_key:
@@ -105,9 +98,6 @@
         user: "root"
       loop: "{{ ssh_pub_keys }}"
       no_log: true
-
-    - name: "Configure SSH"
-      ansible.builtin.import_tasks: "../tasks/configure_ssh.yml"
 
     - name: "Update LXC template database"
       ansible.builtin.command: "pveam update"
@@ -327,7 +317,7 @@
             ("Enabled IRQ remapping" not in iommu_active_status.stdout)
 
   post_tasks:
-    - name: "Unload SSH Key"
-      tags: "always"
-      ansible.builtin.import_tasks: "../tasks/unload_ssh_key.yml"
+    - name: "Unload Ansible SSH Key"
+      tags: always
+      ansible.builtin.import_tasks: "tasks/unload_ssh_key.yml"
 ...

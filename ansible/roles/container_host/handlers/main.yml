@@ -1,0 +1,16 @@
+---
+- name: "Reboot Server"
+  ansible.builtin.reboot:
+
+- name: "Reload Docker service"
+  ansible.builtin.systemd_service:
+    name: "docker.service"
+    state: "restarted"
+
+- name: "Unmonitored reboot"
+  ansible.builtin.shell: "sleep 5 && reboot"
+  args:
+    executable: "/bin/bash"
+  async: 1
+  poll: 0
+...

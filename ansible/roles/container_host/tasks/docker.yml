@@ -1,0 +1,106 @@
+---
+- name: "Install Docker on apt-based systems"
+  when: ansible_facts['pkg_mgr'] == 'apt'
+  block:
+    - name: Import Docker GPG key
+      ansible.builtin.apt_key:
+        url: "https://download.docker.com/linux/{{ ansible_facts.distribution | lower }}/gpg"
+        state: "present"
+
+    - name: "Add Docker repository to APT"
+      ansible.builtin.apt_repository:
+        repo: "deb https://download.docker.com/linux/{{ ansible_facts.distribution | lower }} {{ ansible_facts.distribution_release }} stable"
+        state: "present"
+
+- name: "Add Docker repository to DNF"
+  ansible.builtin.yum_repository:
+    name: "docker-ce"
+    description: "Docker CE Stable - $basearch"
+    baseurl: "https://download.docker.com/linux/{{ ansible_facts.distribution | lower }}/$releasever/$basearch/stable"
+    gpgcheck: true
+    gpgkey: "https://download.docker.com/linux/{{ ansible_facts.distribution | lower }}/gpg"
+    enabled: true
+  when: ansible_facts['pkg_mgr'] == "dnf"
+
+- name: "Install Docker"
+  ansible.builtin.package:
+    name: "docker-ce"
+    state: "present"
+    update_cache: true
+  when: ansible_facts['pkg_mgr'] != 'atomic_container'
+
+- name: "Configure Docker daemon"
+  ansible.builtin.template:
+    src: "templates/dockerdaemon.json.j2"
+    dest: "/etc/docker/daemon.json"
+    mode: "0644"
+  when: ansible_facts['pkg_mgr'] != 'atomic_container'
+
+- name: "Start and enable Docker daemon"
+  ansible.builtin.systemd:
+    name: "docker"
+    enabled: true
+    state: "started"
+    masked: false
+
+- name: "Add {{ admin_user.name }} to docker group"
+  ansible.builtin.user:
+    append: true
+    groups: "docker"
+    name: "{{ admin_user.name }}"
+
+- name: "Set global Docker env vars in /etc/environment"
+  ansible.builtin.lineinfile:
+    path: "/etc/environment"
+    state: "present"
+    regexp: "^{{ item.key }}="
+    line: "{{ item.key }}={{ item.value }}"
+  loop: "{{ docker_global_environment }}"
+  loop_control:
+    label: "{{ item.key }}"
+
+- name: "Set LAN Docker env vars in /etc/environment"
+  ansible.builtin.lineinfile:
+    path: "/etc/environment"
+    state: "present"
+    regexp: "^{{ item.key }}="
+    line: "{{ item.key }}={{ item.value }}"
+  loop: "{{ docker_lan_environment }}"
+  loop_control:
+    label: "{{ item.key }}"
+  when: "'oci' not in group_names"
+
+- name: "Set WAN Docker env vars in /etc/environment"
+  ansible.builtin.lineinfile:
+    path: "/etc/environment"
+    state: "present"
+    regexp: "^{{ item.key }}="
+    line: "{{ item.key }}={{ item.value}}"
+  with_items: "{{ docker_wan_environment }}"
+  loop_control:
+    label: "{{ item.key }}"
+  when: "'oci' in group_names"
+
+- name: "Install Docker Plugins specifically for CoreOS systems"
+  when: ansible_facts['pkg_mgr'] == 'atomic_container'
+  block:
+    - name: "Create Docker plugin directory"
+      ansible.builtin.file:
+        path: "/usr/local/lib/docker/cli-plugins/"
+        state: "directory"
+        mode: "0755"
+
+    - name: "Install Docker Compose v2 plugin"
+      ansible.builtin.get_url:
+        url: "https://github.com/docker/compose/releases/download/v2.29.7/docker-compose-linux-{{ ansible_facts.architecture }}"
+        dest: "/usr/local/lib/docker/cli-plugins/docker-compose"
+        mode: "0755"
+        checksum: "sha256:383ce6698cd5d5bbf958d2c8489ed75094e34a77d340404d9f32c4ae9e12baf0"
+
+    - name: "Install Docker Buildx plugin"
+      ansible.builtin.get_url:
+        url: "https://github.com/docker/buildx/releases/download/v0.17.1/buildx-v0.17.1.linux-amd64"
+        dest: "/usr/local/lib/docker/cli-plugins/docker-buildx"
+        mode: "0755"
+        checksum: "sha256:aa7a9778349e1a8ace685e4c51a1d33e7a9b0aa6925d1c625b09cb3800eba696"
+...
