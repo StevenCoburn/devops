@@ -8,29 +8,29 @@
     password: "{{ lookup('password', '/dev/null length=32 seed=inventory_hostname') }}"
     password_lock: true
 
-- name: "Configure User '{{ admin_user.name }}'"
+- name: "Configure User '{{ admin_user_name }}'"
   ansible.builtin.user:
     append: true
-    groups: "{{ admin_user.groups }}"
-    name: "{{ admin_user.name }}"
+    groups: "{{ admin_user_groups }}"
+    name: "{{ admin_user_name }}"
     # password: "{{ lookup('password', '../credentials/' + ansible_hostname + '/' + item.name + '/password.txt encrypt=md5_crypt') }}"
     shell: "/bin/bash"
     state: "present"
-    uid: "{{ admin_user.uid }}"
+    uid: "{{ admin_user_uid }}"
 
-- name: "Add keys for '{{ admin_user.name }}'"
+- name: "Add keys for '{{ admin_user_name }}'"
   ansible.posix.authorized_key:
     key: "{{ item }}"
     state: "present"
-    user: "{{ admin_user.name }}"
+    user: "{{ admin_user_name }}"
   loop: "{{ ssh_pub_keys }}"
   no_log: true
 
-- name: "Remove revoked keys for '{{ admin_user.name }}'"
+- name: "Remove revoked keys for '{{ admin_user_name }}'"
   ansible.posix.authorized_key:
     key: "{{ item }}"
     state: "absent"
-    user: "{{ admin_user.name }}"
+    user: "{{ admin_user_name }}"
   loop: "{{ ssh_pub_keys_to_revoke }}"
   no_log: true
 
@@ -52,20 +52,20 @@
   ansible.builtin.shell: "/tmp/oh-my-bash-install.sh --prefix=/usr/local --unattended"
   when: oh_my_bash_downloaded.changed
 
-- name: "Copy oh-my-bash .bashrc for '{{ admin_user.name }}'"
+- name: "Copy oh-my-bash .bashrc for '{{ admin_user_name }}'"
   ansible.builtin.template:
-    dest: "/home/{{ admin_user.name }}/.bashrc"
+    dest: "/home/{{ admin_user_name }}/.bashrc"
     force: true
-    group: "{{ admin_user.name }}"
+    group: "{{ admin_user_name }}"
     mode: "0644"
-    owner: "{{ admin_user.name }}"
+    owner: "{{ admin_user_name }}"
     src: "templates/bashrc.j2"
 
 # This is not needed in Fedora CoreOS because a sodoers file exists making all sudo group passwordless
-- name: "No sudo password for '{{ admin_user.name }}'"
+- name: "No sudo password for '{{ admin_user_name }}'"
   ansible.builtin.copy:
-    content: "{{ admin_user.name }}  ALL=(ALL)  NOPASSWD: ALL"
-    dest: "/etc/sudoers.d/{{ admin_user.name }}"
+    content: "{{ admin_user_name }}  ALL=(ALL)  NOPASSWD: ALL"
+    dest: "/etc/sudoers.d/{{ admin_user_name }}"
     mode: "0440"
   when:
     - ansible_facts['os_family'] != "RedHat" or

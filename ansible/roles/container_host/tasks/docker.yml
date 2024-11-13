@@ -43,11 +43,11 @@
     state: "started"
     masked: false
 
-- name: "Add {{ admin_user.name }} to docker group"
+- name: "Add {{ admin_user_name }} to docker group"
   ansible.builtin.user:
     append: true
     groups: "docker"
-    name: "{{ admin_user.name }}"
+    name: "{{ admin_user_name }}"
 
 - name: "Set global Docker env vars in /etc/environment"
   ansible.builtin.lineinfile:
