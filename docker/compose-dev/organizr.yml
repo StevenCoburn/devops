@@ -1,7 +1,5 @@
-version: "2"
-
+---
 services:
-
   Organizr:
     image: organizr/organizr
     container_name: Organizr

@@ -1,8 +1,6 @@
 #This is based on http://tonylawrence.com/posts/unix/synology/free-your-synology-ports/
-version: '2'
- 
+---
 services:
-
   PiHole:
     image: pihole/pihole:latest
     container_name: PiHole

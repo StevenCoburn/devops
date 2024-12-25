@@ -1,8 +1,7 @@
 # Unmodified compose file from https://github.com/sonatype/docker-nexus3
 
 # Doesn't want to work out of the box through Traefik (won't pass headers while uploading Docker image)
-version: '3'
-
+---
 services:
   nexus:
     image: sonatype/nexus3:latest

@@ -1,5 +1,4 @@
-version: '2'
-
+---
 services:
   VPN_Server:
     image: hwdsl2/ipsec-vpn-server

@@ -1,5 +1,4 @@
-version: '3.8'
-
+---
 services:
   unifi:
     image: linuxserver/unifi-controller:latest

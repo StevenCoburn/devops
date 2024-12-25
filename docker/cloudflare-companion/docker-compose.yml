@@ -1,7 +1,5 @@
-version: '3.8'
-
+---
 services:
-
   CF-Companion:
     image: ghcr.io/tiredofit/docker-traefik-cloudflare-companion:7.2.0
     container_name: CF-Companion

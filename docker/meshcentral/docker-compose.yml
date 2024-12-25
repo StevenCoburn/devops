@@ -1,6 +1,5 @@
-version: '3.8'
-
 # Build with docker compose build --build-arg id=...
+---
 services:
   meshcentral:
     container_name: meshcentral

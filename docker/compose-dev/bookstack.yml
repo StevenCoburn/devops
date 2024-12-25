@@ -1,4 +1,4 @@
-version: "2"
+---
 services:
   BookStack:
     image: linuxserver/bookstack:latest

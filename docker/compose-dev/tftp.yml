@@ -1,7 +1,5 @@
-version: '2'
- 
+---
 services:
-
   TFTP_Server:
     image: instantlinux/dhcpd-dns-pxe:latest
     container_name: TFTP_Server

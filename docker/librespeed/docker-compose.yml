@@ -1,5 +1,4 @@
-version: '3.8'
-
+---
 services:
   speedtest:
     image: ghcr.io/linuxserver/librespeed:latest

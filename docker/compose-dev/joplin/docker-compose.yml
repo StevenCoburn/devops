@@ -2,8 +2,7 @@
 # For ARM64, you must pull the Git repo, add this compose file, and build it manually
 # Git repo: https://github.com/laurent22/joplin
 
-version: "3.8"
-
+---
 networks:
   joplin:
     name: joplin

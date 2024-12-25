@@ -1,4 +1,4 @@
-version: '3.8'
+---
 services:
   discord-smtp-relay:
     container_name: discord-smtp-relay
