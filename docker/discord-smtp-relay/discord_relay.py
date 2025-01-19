@@ -3,6 +3,7 @@ import ssl
 import email
 import signal
 from email import policy
+import time
 
 import requests
 from aiosmtpd.controller import Controller
@@ -42,13 +43,25 @@ class DiscordRelayHandler(Message):
                             message.get('subject'),
                             msg_body)
 
-    def notify_discord(self, to_addr, from_addr, subject, body):
+    def notify_discord(self, to_addr, from_addr, subject, body, retries=12, delay=5):
         webhook_data = {
             "username": from_addr,
             "content": "### {0}\r\n>>> {1}@everyone".format(subject, body)
         }
         print(f"New message request from " + from_addr)
-        r=requests.post(self.webhook_url,json=webhook_data)
+        for attempt in range(retries):
+            try:
+                r=requests.post(self.webhook_url,json=webhook_data)
+                r.raise_for_status()  # Raise an exception for HTTP errors
+                print("Notification sent successfully")
+                break
+            except requests.exceptions.RequestException as e:
+                print(f"Attempt {attempt + 1} of {retries} failed: {e}")
+                if attempt < retries - 1:
+                    time.sleep(delay)
+                    continue
+                else:
+                    print("All retry attempts failed")
 
     # This helper function constructs a dictionary in the format of a "field" object
     # in the Discord webhooks API
