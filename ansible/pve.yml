@@ -30,6 +30,12 @@
       changed_when: false
       register: pve_efitool_status
 
+    - name: "Enable and start Glances"
+      ansible.builtin.systemd:
+        enabled: true
+        name: "glances"
+        state: "started"
+
   pre_tasks:
     - name: "Preload Ansible SSH Key"
       tags: "always"
@@ -80,6 +86,8 @@
           - "ipmitool"
           - "lm-sensors"
           - "net-tools"
+          - "python3-pip"
+          - "python3-venv"
         update_cache: true
 
     - name: "Install intel-firmware for MS-01 hardware"
@@ -90,6 +98,30 @@
     - name: "Update software using the OS package manager"
       ansible.builtin.import_playbook:
         playbook: "os_update_playbook.yml"
+
+    - name: "Install glances using pip into venv /root/glances_venv"
+      ansible.builtin.pip:
+        name: "glances[all]"
+        virtualenv: "/root/glances_venv"
+        virtualenv_command: "/usr/bin/python3 -m venv"
+
+    - name: "Create a systemd service for glances"
+      ansible.builtin.copy:
+        content: |
+          [Unit]
+          Description=Glances
+          After=network.target
+
+          [Service]
+          ExecStart=/root/glances_venv/bin/glances -w --disable-webui
+          Restart=on-abort
+          RemainAfterExit=yes
+
+          [Install]
+          WantedBy=multi-user.target
+        dest: "/etc/systemd/system/glances.service"
+        mode: "0644"
+      notify: "Enable and start Glances"
 
     - name: "Add authorized SSH keys"
       ansible.posix.authorized_key:
