@@ -11,8 +11,9 @@
 # - Change RDP password
 # - Setup cpu/gpu temperature probe and gpu usage monitor for resource monitor
 # - Add ~/.vault_pass.txt for ansible
+# - Configure multi-monitor
 # - Sign into apps and configure them (Firefox, Steam, etc.)
-# - Make sure yubikey SSH works (`ssh-keygen -K`, rename sk key name, `ssh -T git@github.com`)
+# - Make sure yubikey SSH works (`ssh-keygen -K`, rename sk key name, run "eval `ssh-agent`", `ssh -T git@github.com`)
 # - Customize app menu (put default apps into a folder, IDEs into a folder, etc.)
 # - Customize nautilus sidebar (e.g. adding network shares as bookmarks)
 
