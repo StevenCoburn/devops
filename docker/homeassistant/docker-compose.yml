@@ -8,25 +8,23 @@ networks:
     name: ${home_net_name}
     driver: macvlan
     driver_opts:
-      parent: eno1.${home_net_vlan}
+      parent: vlan${home_net_vlan}
     ipam:
-      driver: default
       config:
         - subnet: ${home_net_subnet}
           gateway: ${home_net_gateway}
   external-bridge:
     name: external-bridge
+    external: true
   internal-homeassistant:
-    external: false
-    internal: true
     name: internal-homeassistant
+    internal: true
   internal-iot-vlan:
     name: ${iot_net_name}
     driver: macvlan
     driver_opts:
-      parent: eno1.${iot_net_vlan}
+      parent: vlan${iot_net_vlan}
     ipam:
-      driver: default
       config:
         - subnet: ${iot_net_subnet}
           gateway: ${iot_net_gateway}
@@ -42,9 +40,9 @@ services:
     environment:
       TZ: ${TZ}
     volumes:
-      - ${nfsvols}/hass/config:/config
+      - ${nfsapps}/homeassistant/app:/config
     networks:
-      # external-home-vlan must be first for Apple Home to work
+      # external-home-vlan must be first for Apple Homekit to work
       external-home-vlan:
         ipv4_address: ${homeassistant_home_ip}
       internal-iot-vlan:
@@ -66,7 +64,7 @@ services:
     security_opt: [no-new-privileges:true]
     networks: [internal-homeassistant]
     volumes:
-      - ${nfsvols}/hass/db:/home/postgres/pgdata
+      - ${nfsapps}/homeassistant/db:/home/postgres/pgdata
 
   # Port: 1883
   # To add user, in container: mosquitto_passwd -b /mosquitto/config/mqttuser username password
@@ -81,9 +79,9 @@ services:
     privileged: false
     security_opt: [no-new-privileges:true]
     volumes:
-      - ${nfsvols}/hass/mqtt/config:/mosquitto/config
-      - ${nfsvols}/hass/mqtt/data:/mosquitto/data
-      - ${nfsvols}/hass/mqtt/log:/mosquitto/log
+      - ${nfsapps}/homeassistant/mqtt/config:/mosquitto/config
+      - ${nfsapps}/homeassistant/mqtt/data:/mosquitto/data
+      - ${nfsapps}/homeassistant/mqtt/log:/mosquitto/log
 
   homeassistant-esphome:
     image: ghcr.io/esphome/esphome:2024.12
@@ -103,7 +101,7 @@ services:
       USERNAME: ${ESPHOME_USER}
       PASSWORD: ${ESPHOME_PASSWORD}
     volumes:
-      - ${nfsvols}/hass/esphome:/config
+      - ${nfsapps}/homeassistant/esphome:/config
 
   # Port: 8080
   homeassistant-zigbee2mqtt:
@@ -111,7 +109,7 @@ services:
     container_name: homeassistant-zigbee2mqtt
     restart: unless-stopped
     networks:
-      # internet-capable network must be first if I want Z2M to search for firmeware updates
+      # internet-capable network must be first if I want Z2M to search for firmware updates
       internal-homeassistant:
       internal-iot-vlan:
         ipv4_address: ${zigbee2mqtt_ip}
@@ -121,7 +119,7 @@ services:
     environment:
       TZ: ${TZ}
     volumes:
-      - ${nfsvols}/hass/zigbee2mqtt:/app/data
+      - ${nfsapps}/homeassistant/zigbee2mqtt:/app/data
 
   # grafana:
   #   image: grafana/grafana-enterprise:10.2.7
@@ -139,7 +137,7 @@ services:
   #   secrets:
   #     - grafana_admin_password
   #   volumes:
-  #     - ${nfsvols}/grafana:/var/lib/grafana
+  #     - ${nfsapps}/homeassistant/grafana:/var/lib/grafana
 
   # Port: 1880
   # homeassistant-node-red:
@@ -151,7 +149,7 @@ services:
   #   privileged: false
   #   security_opt: [no-new-privileges:true]
   #   volumes:
-  #     - ${nfsvols}/hass/nodered:/data
+  #     - ${nfsapps}/homeassistant/nodered:/data
 
   # Port: 8080
   # homeassistant-vscode:

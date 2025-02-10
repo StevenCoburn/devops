@@ -29,10 +29,8 @@ services:
   #       TZ: ${TZ}
   #       CREATE: 1
   #       VERBOSE: 1
-  #   labels:
-  #     - "traefik.enable=false"        
   #   volumes:
-  #     - ${nfsvols}/tftp-data:/tftpboot
+  #     - ${nfsapps}/misc/tftp-data:/tftpboot
   #   ports:
   #     - 69:69/udp
 

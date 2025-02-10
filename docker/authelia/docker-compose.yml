@@ -8,7 +8,7 @@ services:
     image: ghcr.io/authelia/authelia:4.37
     container_name: authelia
     volumes:
-      - ${nfsvols}/authelia:/config
+      - ${nfsapps}/misc/authelia:/config
     networks: [traefik]
     user: ${NFS_PUID}:${NFS_PGID}
     labels:

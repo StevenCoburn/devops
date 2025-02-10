@@ -2,8 +2,10 @@
 networks:
   external-bridge:
     name: external-bridge
+    external: true
   internal-mealie:
     name: internal-mealie
+    internal: true
 
 services:
   mealie:
@@ -16,7 +18,7 @@ services:
     ports:
       - 9001:9000
     volumes:
-      - ${nfsvols}/mealie/appdata:/app/data/
+      - ${nfsapps}/mealie/app:/app/data/
     environment:
       BASE_URL: https://recipes.${DOMAIN}
       TOKEN_TIME: 4
@@ -43,7 +45,7 @@ services:
     security_opt: [no-new-privileges:true]
     networks: [internal-mealie]
     volumes:
-      - ${nfsvols}/mealie/db:/var/lib/postgresql/data
+      - ${nfsapps}/mealie/db:/var/lib/postgresql/data
     environment:
       POSTGRES_DB: mealie
       POSTGRES_USER: mealie

@@ -1,8 +1,8 @@
 ---
 networks:
-  external-traefik:
+  external-bridge:
+    name: external-bridge
     external: true
-    name: external-traefik
   internal-nextcloud:
     name: internal-nextcloud
     internal: true
@@ -20,22 +20,8 @@ secrets:
     file: ${nfssecrets}/nextcloud_pg_user
 
 volumes:
-  nextcloud-db:
-    name: nextcloud-db
   nextcloud-redis:
     name: nextcloud-redis
-  nextcloud-main:
-    name: nextcloud-main
-  nextcloud-data:
-    name: nextcloud-data
-    # driver_opts:
-    #   type: "nfs"
-    #   o: "${NFS_SERVER_CONNECT}"
-    #   device: ":${NEXTCLOUD_DATA_DIR}"
-  document_data:
-    name: document_data
-  document_log:
-    name: document_log
 
 services:
   nextcloud:
@@ -44,16 +30,19 @@ services:
     restart: unless-stopped
     privileged: false
     security_opt: [no-new-privileges:true]
-    networks: [external-traefik, internal-nextcloud]
+    networks: [external-bridge, internal-nextcloud]
+    ports:
+      - 8083:80
     volumes:
-      - nextcloud-main:/var/www/html
-      - nextcloud-data:/var/www/html/data
+      - ${nfsapps}/nextcloud/app:/var/www/html
+      - ${nfsapps}/nextcloud/data:/var/www/html/data
       - ${nfsbackup}/nextcloud:/backups
     environment:
       NEXTCLOUD_TRUSTED_DOMAINS: drive.${DOMAIN}
       OVERWRITEPROTOCOL: https
       APACHE_DISABLE_REWRITE_IP: 1
-      TRUSTED_PROXIES: external-traefik
+      # trusted proxies only needs declared once during config.php population (set to the reverse proxy IP)
+      # TRUSTED_PROXIES: x.x.x.x
       PHP_UPLOAD_LIMIT: 512M
       REDIS_HOST: nextcloud-redis
       POSTGRES_HOST: nextcloud-db
@@ -62,16 +51,9 @@ services:
       POSTGRES_PASSWORD_FILE: /run/secrets/nextcloud_pg_pass
       NEXTCLOUD_ADMIN_PASSWORD_FILE: /run/secrets/nextcloud_admin_password
       NEXTCLOUD_ADMIN_USER_FILE: /run/secrets/nextcloud_admin_user
+      NEXTCLOUD_DATADIR: /var/www/html/data
       # APACHE_RUN_USER: ${NFS_PUID} #k8s user on the shared storage
       # APACHE_RUN_GROUP: ${NFS_PGID}
-    labels:
-      traefik.enable: true
-      traefik.http.routers.nextcloud.tls: true
-      traefik.http.routers.nextcloud.service: nextcloud
-      traefik.http.services.nextcloud.loadbalancer.server.port: 80
-      traefik.http.routers.nextcloud.rule: Host(`drive.${DOMAIN}`)
-      traefik.http.routers.nextcloud.middlewares: secure-headers@file,nextcloud-cal-redirect@file
-      traefik.docker.network: external-traefik
     links:
       - nextcloud-db
       - nextcloud-redis
@@ -96,7 +78,7 @@ services:
     security_opt: [no-new-privileges:true]
     networks: [internal-nextcloud]
     volumes:
-      - ${nfsvols}/nextcloud-db:/var/lib/postgresql/data
+      - ${nfsapps}/nextcloud/db:/var/lib/postgresql/data
       - ${nfsbackup}/nextcloud:/backup
     environment:
       POSTGRES_DB_FILE: /run/secrets/nextcloud_pg_name
@@ -107,7 +89,6 @@ services:
       - nextcloud_pg_pass
       - nextcloud_pg_user
 
-
   # WOPI feature check: https://collabora.$DOMAIN/hosting/discovery
   # Admin interface: https://collabora.$DOMAIN/browser/dist/admin/admin.html
   collabora:
@@ -116,7 +97,9 @@ services:
     restart: unless-stopped
     cap_add:
       - MKNOD
-    networks: [external-traefik]
+    networks: [external-bridge]
+    ports:
+      - 9980:9980
     environment:
       domain: drive.${DOMAIN}
       extra_params: "--o:ssl.enable=false --o:ssl.termination=true"
@@ -124,12 +107,6 @@ services:
       DONT_GEN_SSL_CERT: true
       #username: admin
       #password: admin
-    labels:
-      traefik.enable: true
-      traefik.http.routers.collabora.tls: true
-      traefik.http.routers.collabora.service: collabora
-      traefik.http.services.collabora.loadbalancer.server.port: 9980
-      traefik.http.routers.collabora.middlewares: secure-headers@file
 
   nextcloud-redis:
     image: redis:7-alpine

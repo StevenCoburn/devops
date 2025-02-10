@@ -10,7 +10,7 @@ services:
     privileged: false
     security_opt: [no-new-privileges:true]
     volumes:
-      - ${nfsvols}/meshcentral:/opt/meshcentral/meshcentral-data
+      - ${nfsapps}/misc/meshcentral:/opt/meshcentral/meshcentral-data
     ports:
       - 1100:1100
       - 4433:4433
