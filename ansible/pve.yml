@@ -1,13 +1,12 @@
-# Initial cluster creation OR single-node operation
-# - Manually modify the /etc/pve/storage.cfg to add networked storage
+# Must add Ansible ssh key to root authorized_keys before running the playbook
+# If running standalone or as cluster initiator, manually modify /etc/pve/storage.cfg for network storage
+# If running the bootloader from a USB drive, pre-allocate the EFI as exactly 1.50 GB
+# If running on a machine with Intel AMT, set the "nomodeset" kernel parameter at the PVE installer to force 800x600
 
 ---
 - name: "Proxmox VE Setup"
   hosts: "pve"
   gather_facts: false
-
-  roles:
-    - common
 
   vars_prompt:
     - name: "safe_to_reboot"
@@ -24,11 +23,9 @@
         name: "pveproxy.service"
         state: "reloaded"
 
-    # This command sometimes failed in script form, but in Ansible, so far so good
     - name: "Refresh EFI config"
       ansible.builtin.command: "pve-efiboot-tool refresh"
       changed_when: false
-      register: pve_efitool_status
 
     - name: "Enable and start Glances"
       ansible.builtin.systemd:
@@ -47,6 +44,52 @@
       ansible.builtin.setup:
 
   tasks:
+    - name: "Find the USB EFI partition"
+      ansible.builtin.set_fact:
+        usb_efi_partition: >-
+          {{
+            ansible_devices
+            | dict2items
+            | selectattr('value.host', 'search', 'USB')
+            | map(attribute='value.partitions')
+            | map('dict2items')
+            | flatten
+            | selectattr('value.size', 'equalto', '1.50 GB')
+            | list
+          }}
+      when: ansible_system_vendor == 'Supermicro'
+
+    - name: "Fail if not exactly one USB EFI partition found"
+      ansible.builtin.fail:
+        msg: "Found {{ usb_efi_partition | length }} USB EFI partitions, expected exactly 1"
+      when:
+        - usb_efi_partition is defined
+        - usb_efi_partition | length != 1
+
+    - name: "Query pve-efiboot-tool to see if USB EFI drive is already loaded"
+      ansible.builtin.command: "pve-efiboot-tool status"
+      register: pve_boot_pre_status
+      changed_when: false
+      when: usb_efi_partition is defined
+
+    - name: "Run pve-efiboot-tool to format the USB EFI drive"
+      ansible.builtin.command: "pve-efiboot-tool format /dev/{{ usb_efi_partition[0].key }} --force"
+      changed_when: true
+      failed_when: "'Formatting' not in pve_boot_format.stdout"
+      register: pve_boot_format
+      when:
+        - usb_efi_partition is defined
+        - usb_efi_partition[0].value.uuid not in pve_boot_pre_status.stdout
+
+    - name: "Run pve-efiboot-tool to initialize the USB EFI drive"
+      ansible.builtin.command: "pve-efiboot-tool init /dev/{{ usb_efi_partition[0].key }}"
+      changed_when: true
+      failed_when: "'Configuring systemd-boot' not in pve_boot_init.stdout"
+      register: pve_boot_init
+      when:
+        - usb_efi_partition is defined
+        - usb_efi_partition[0].value.uuid not in pve_boot_pre_status.stdout
+
     - name: "Change root password"
       ansible.builtin.user:
         name: "root"
@@ -88,16 +131,13 @@
           - "net-tools"
           - "python3-pip"
           - "python3-venv"
+          - "tmux"
         update_cache: true
 
     - name: "Install intel-firmware for MS-01 hardware"
       ansible.builtin.apt:
         name: "intel-microcode"
       when: ansible_system_vendor == 'Micro Computer (HK) Tech Limited'
-
-    - name: "Update software using the OS package manager"
-      ansible.builtin.import_playbook:
-        playbook: "os_update_playbook.yml"
 
     - name: "Install glances using pip into venv /root/glances_venv"
       ansible.builtin.pip:
@@ -165,18 +205,25 @@
         src: "{{ inventory_dir }}/templates/pve-fcos-template.sh.j2"
       when: "ansible_hostname == pve_primary_server"
 
-    - name: "Blacklist SAS controllers and GPUs"
+    - name: "Blacklist devices intended for PCI passthrough"
       ansible.builtin.copy:
         content: |
+          # LSI RAID controllers and HBAs
           # megaraid_sas is for SAS controllers with IR firmware (even in HBA mode)
           # mpt3sas is for SAS controllers with IT firmware
           blacklist megaraid_sas
           blacklist mpt3sas
 
-          # blacklist AMD and Nvidia GPUs
+          # AMD and Nvidia GPUs
           blacklist nouveau
           blacklist nvidia*
           blacklist radeon
+
+          # TV Tuner
+          blacklist cx23885
+
+          # SATA Controllers
+          blacklist ahci
         dest: "/etc/modprobe.d/blacklist.conf"
         mode: "0644"
 
@@ -195,7 +242,7 @@
 
     # Since the Minisforum PCs have the vPro interface on phc_index 1 instead of 0,
     #   we need to reverse sort their 1/2.5g interfaces to use the vPro NIC as PVE management
-    - name: "Seperate 1g and 10g interface variables"
+    - name: "Separate 1g and 10g interface variables"
       ansible.builtin.set_fact:
         gigabit_interfaces: >-
           {{
@@ -225,6 +272,15 @@
         line: "\\1 net.ifnames=0 biosdevname=0"
         path: "/etc/kernel/cmdline"
         regexp: '^(root(?!.*\bnet.ifnames=0 biosdevname=0\b).*)$'
+        state: "present"
+      notify: "Refresh EFI config"
+
+    - name: "Add kernel parameter to add a little root delay"
+      ansible.builtin.lineinfile:
+        backrefs: true
+        line: "\\1 rootdelay=5"
+        path: "/etc/kernel/cmdline"
+        regexp: '^(root(?!.*\brootdelay=5\b).*)$'
         state: "present"
       notify: "Refresh EFI config"
 
