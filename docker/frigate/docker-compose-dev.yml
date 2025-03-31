@@ -21,7 +21,7 @@ networks:
 
 services:
   frigate-dev:
-    image: ghcr.io/blakeblackshear/frigate:0.14.1
+    image: ghcr.io/blakeblackshear/frigate:0.15.0
     container_name: frigate-dev
     restart: unless-stopped
     privileged: false
@@ -43,18 +43,8 @@ services:
     networks:
       internal-iot-vlan:
         ipv4_address: ${frigate_dev_ip}
-      # internal-homeassistant:
     environment:
       TZ: ${TZ}
-      # NVIDIA_VISIBLE_DEVICES: nvidia.com/gpu=0
-      # YOLO_MODELS: yolov7-320, yolov4-tiny-288, yolov4-tiny-416, yolov7-tiny-416
       FRIGATE_RTSP_PASSWORD: ${frigate_rtsp_password}
       FRIGATE_MQTT_USER: frigate
       FRIGATE_MQTT_PASSWORD: ${frigate_mqtt_password}
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #       - driver: nvidia
-    #         count: 1
-    #         capabilities: [gpu]

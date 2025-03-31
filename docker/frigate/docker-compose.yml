@@ -21,14 +21,15 @@ networks:
 
 services:
   frigate:
-    image: ghcr.io/blakeblackshear/frigate:0.13.2-tensorrt
+    image: ghcr.io/blakeblackshear/frigate:0.15.0
     container_name: frigate
     restart: unless-stopped
     privileged: false
     security_opt: [no-new-privileges:true]
-    runtime: nvidia
     shm_size: 100m
     tmpfs: /tmp/cache:size=500m # reduces SSD/SD Card wear
+    devices:
+      - /dev/apex_0:/dev/apex_0 # Pass in the PCI Coral TPU
     volumes:
       - ${nfsapps}/frigate/config.yml:/config/config.yml
       - ${nfsapps}/frigate:/media/frigate
@@ -42,20 +43,8 @@ services:
     networks:
       internal-iot-vlan:
         ipv4_address: ${frigate_ip}
-      internal-homeassistant:
     environment:
       TZ: ${TZ}
-      NVIDIA_VISIBLE_DEVICES: nvidia.com/gpu=0
-      YOLO_MODELS: yolov7-320, yolov4-tiny-288, yolov4-tiny-416, yolov7-tiny-416
       FRIGATE_RTSP_PASSWORD: ${frigate_rtsp_password}
       FRIGATE_MQTT_USER: frigate
       FRIGATE_MQTT_PASSWORD: ${frigate_mqtt_password}
-    # devices:
-    #   - /dev/apex_0:/dev/apex_0 # passes a PCIe Coral
-    deploy:
-      resources:
-        reservations:
-          devices:
-          - driver: nvidia
-            count: 1
-            capabilities: [gpu]
