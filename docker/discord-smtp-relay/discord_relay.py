@@ -44,6 +44,11 @@ class DiscordRelayHandler(Message):
                             msg_body)
 
     def notify_discord(self, to_addr, from_addr, subject, body, retries=12, delay=5):
+        # Truncate the body to fit within Discord's 2000-character limit
+        max_length = 2000 - len(f"### {subject}\r\n>>> ") - len("@everyone") -len("...\n[Message truncated]")
+        if len(body) > max_length:
+            body = body[:max_length] + "...\n[Message truncated]"
+
         webhook_data = {
             "username": from_addr,
             "content": "### {0}\r\n>>> {1}@everyone".format(subject, body)
