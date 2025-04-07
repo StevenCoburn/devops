@@ -14,10 +14,6 @@ networks:
       config:
         - subnet: ${iot_net_subnet}
           gateway: ${iot_net_gateway}
-  internal-homeassistant:
-    external: true
-    internal: true
-    name: internal-homeassistant
 
 services:
   frigate-dev:
@@ -26,20 +22,14 @@ services:
     restart: unless-stopped
     privileged: false
     security_opt: [no-new-privileges:true]
-    shm_size: 100m
+    shm_size: 256m
     tmpfs: /tmp/cache:size=500m # reduces SSD/SD Card wear
     devices:
       - /dev/apex_0:/dev/apex_0 # Pass in the PCI Coral TPU
     volumes:
       - ${nfsapps}/frigate-dev/config.yml:/config/config.yml
       - ${nfsapps}/frigate-dev:/media/frigate
-      # - ${nfsvols}/frigate-dev/tensorrt_models:/config/model_cache/tensorrt
       - frigate-db-dev:/db
-    # ports:
-    #   - "5000:5000"
-    #   - "8554:8554" # RTSP feeds
-    #   - "8555:8555/tcp" # WebRTC over tcp
-    #   - "8555:8555/udp" # WebRTC over udp
     networks:
       internal-iot-vlan:
         ipv4_address: ${frigate_dev_ip}
