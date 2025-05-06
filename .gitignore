@@ -4,6 +4,8 @@ credentials/
 
 *.code-workspace
 
+.ansible
+
 # Environments
 .env
 .venv
