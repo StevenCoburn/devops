@@ -1,7 +1,7 @@
 # Must add Ansible ssh key to root authorized_keys before running the playbook
 # If running standalone or as cluster initiator, manually modify /etc/pve/storage.cfg for network storage
 # If running the bootloader from a USB drive, pre-allocate the EFI as exactly 1.50 GB
-# If running on a machine with Intel AMT, set the "nomodeset" kernel parameter at the PVE installer to force 800x600
+# If running on a machine with Intel AMT, set "video=1024x768@60" in kernel parameters at the PVE installer to force lower resolution
 
 ---
 - name: "Proxmox VE Setup"
@@ -115,13 +115,6 @@
         - "deb http://download.proxmox.com/debian/pve {{ ansible_distribution_release }} pve-no-subscription"
         - "deb http://download.proxmox.com/debian/ceph-quincy {{ ansible_distribution_release }} no-subscription"
 
-    - name: "Enable Intel firmware repo for MS-01 hardware"
-      ansible.builtin.apt_repository:
-        repo: "deb http://ftp.debian.org/debian {{ ansible_distribution_release }} main contrib non-free-firmware"
-        state: "present"
-        update_cache: false
-      when: ansible_system_vendor == 'Micro Computer (HK) Tech Limited'
-
     - name: "Update apt cache and install some additional packages"
       ansible.builtin.apt:
         name:
@@ -134,10 +127,66 @@
           - "tmux"
         update_cache: true
 
-    - name: "Install intel-firmware for MS-01 hardware"
-      ansible.builtin.apt:
-        name: "intel-microcode"
+    - name: "Tasks to configure MS-01 hardware, such as enabling i915 vGPU and installing intel microcode"
       when: ansible_system_vendor == 'Micro Computer (HK) Tech Limited'
+      block:
+        - name: "Add kernel parameter to force a nicer TTY resolution for AMT"
+          ansible.builtin.lineinfile:
+            backrefs: true
+            line: "\\1 video=1024x768@60"
+            path: "/etc/kernel/cmdline"
+            regexp: '^(root(?!.*\bvideo=1024x768@60\b).*)$'
+            state: "present"
+          notify: "Refresh EFI config"
+
+        - name: "Enable Intel firmware repo for MS-01 hardware"
+          ansible.builtin.apt_repository:
+            repo: "deb http://ftp.debian.org/debian {{ ansible_distribution_release }} main contrib non-free-firmware"
+            state: "present"
+            update_cache: false
+
+        - name: "Install apt packages for intel-firmware and i915 vGPU"
+          ansible.builtin.apt:
+            name:
+              - "build-essential"
+              - "dkms"
+              - "git"
+              - "intel-microcode"
+              - "pve-headers"
+              - "sysfsutils"
+
+        # TODO: Insert tasks here to remove the i915 dkms module for upgrade purposes
+        # https://www.derekseaman.com/2024/07/proxmox-ve-8-2-windows-11-vgpu-vt-d-passthrough-with-intel-alder-lake.html
+
+        - name: "Download the i915-sriov-dkms .deb package"
+          ansible.builtin.get_url:
+            dest: "/tmp/i915-sriov-dkms.deb"
+            mode: "0644"
+            url: >-
+              {{
+                lookup('url', 'https://api.github.com/repos/strongtz/i915-sriov-dkms/releases/latest', split_lines=false)
+                | from_json
+                | json_query('assets[?name.ends_with(@, `.deb`)].browser_download_url')
+                | first
+              }}
+
+        - name: "Install the i915-sriov-dkms .deb package"
+          ansible.builtin.apt:
+            deb: "/tmp/i915-sriov-dkms.deb"
+
+        - name: "Add Intel vGPU parameters to kernel command line"
+          ansible.builtin.lineinfile:
+            backrefs: true
+            line: "\\1 i915.enable_guc=3 i915.max_vfs=7"
+            path: "/etc/kernel/cmdline"
+            regexp: '^(root(?!.*\bi915.enable_guc=3 i915.max_vfs=7\b).*)$'
+            state: "present"
+          notify: "Refresh EFI config"
+
+        - name: "Add sysfs attribute to enable virtual GPUs"
+          ansible.builtin.lineinfile:
+            line: "devices/pci0000:00/0000:00:02.0/sriov_numvfs = 7"
+            path: "/etc/sysfs.conf"
 
     - name: "Install glances using pip into venv /root/glances_venv"
       ansible.builtin.pip:
