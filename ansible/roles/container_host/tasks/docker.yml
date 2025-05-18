@@ -49,38 +49,6 @@
     groups: "docker"
     name: "{{ admin_user_name }}"
 
-- name: "Set global Docker env vars in /etc/environment"
-  ansible.builtin.lineinfile:
-    path: "/etc/environment"
-    state: "present"
-    regexp: "^{{ item.key }}="
-    line: "{{ item.key }}={{ item.value }}"
-  loop: "{{ docker_global_environment }}"
-  loop_control:
-    label: "{{ item.key }}"
-
-- name: "Set LAN Docker env vars in /etc/environment"
-  ansible.builtin.lineinfile:
-    path: "/etc/environment"
-    state: "present"
-    regexp: "^{{ item.key }}="
-    line: "{{ item.key }}={{ item.value }}"
-  loop: "{{ docker_lan_environment }}"
-  loop_control:
-    label: "{{ item.key }}"
-  when: "'oci' not in group_names"
-
-- name: "Set WAN Docker env vars in /etc/environment"
-  ansible.builtin.lineinfile:
-    path: "/etc/environment"
-    state: "present"
-    regexp: "^{{ item.key }}="
-    line: "{{ item.key }}={{ item.value}}"
-  with_items: "{{ docker_wan_environment }}"
-  loop_control:
-    label: "{{ item.key }}"
-  when: "'oci' in group_names"
-
 - name: "Install Docker Plugins specifically for CoreOS systems"
   when: ansible_facts['pkg_mgr'] == 'atomic_container'
   block:

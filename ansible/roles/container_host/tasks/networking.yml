@@ -15,17 +15,30 @@
       register: grub_updated
       when: grub_file_stat.stat.exists
 
-    # fedora uses "grub2" as the executable and file path, other OSs might just use "grub
-    - name: "Update GRUB if config has changed"
-      # ansible.builtin.command: /usr/sbin/update-grub
+    - name: "Update GRUB if config has changed (fedora)"
       ansible.builtin.command: "/usr/sbin/grub2-mkconfig -o /boot/grub2/grub.cfg"
-      when: grub_updated.changed
+      when: 
+        - grub_updated.changed
+        - ansible_facts['os_family'] == "RedHat"
+
+    - name: "Update GRUB if config has changed (debian)"
+      ansible.builtin.command: /usr/sbin/update-grub
+      when: 
+        - grub_updated.changed
+        - ansible_facts['os_family'] == "Debian"
+
+    - name: Disable IPv6
+      ansible.posix.sysctl:
+        name: net.ipv6.conf.all.disable_ipv6
+        value: '1'
+        state: present
+        sysctl_set: true
 
     - name: "Gather package facts"
       ansible.builtin.package_facts:
         manager: "auto"
 
-    - name: Gather file stats for Network Manager configs
+    - name: Gather file stats for netplan configs
       ansible.builtin.stat:
         path: '{{ item }}'
       loop:
@@ -34,7 +47,7 @@
       register: netplan_files
       when: "'netplan.io' in ansible_facts.packages"
 
-    - name: Set interface name to eno1 (Network Manager)
+    - name: Set interface name to eno1 when using netplan
       ansible.builtin.replace:
         path: '{{ item.item }}'
         # eno1, ens1/ens18, enp2s0, eth0
@@ -45,38 +58,6 @@
       when:
         - "'netplan.io' in ansible_facts.packages"
         - item.stat.exists
-
-    - name: Remove /etc/network/interfaces
-      ansible.builtin.file:
-        path: /etc/network/interfaces
-        state: absent
-      when: "'ifupdown' in ansible_facts.packages"
-
-    - name: Configure network interface (local)
-      ansible.builtin.blockinfile:
-        block: |
-          auto lo
-          iface lo inet loopback
-
-          # The primary network interface
-          allow-hotplug eno1
-
-          auto eno1.{{ server_vlan }}
-          iface eno1.{{ server_vlan }} inet dhcp
-
-          auto eno1.{{ storage_vlan }}
-          iface eno1.{{ storage_vlan }} inet dhcp
-        create: true
-        mode: "0644"
-        path: /etc/network/interfaces
-      when: "'ifupdown' in ansible_facts.packages"
-
-    - name: Disable IPv6
-      ansible.posix.sysctl:
-        name: net.ipv6.conf.all.disable_ipv6
-        value: '1'
-        state: present
-        sysctl_set: true
 
 # Old school way to get MAC address was this:
 # MAC=$(cat /sys/class/net/$(ip route show default | awk '/default/ {print $5}')/address)
@@ -93,36 +74,54 @@
       Name=eno1
   notify: "Unmonitored reboot"
 
-# Requires network-manager
-- name: "Create Server VLAN {{ server_vlan }}"
-  community.general.nmcli:
-    conn_name: "eno1.{{ server_vlan }}"
-    method6: "disabled"
-    state: "present"
-    type: "vlan"
-    vlandev: "eno1"
-    vlanid: "{{ server_vlan }}"
-  notify: "Unmonitored reboot"
+- name: Configure network interface with ifupdown (old school method)
+  ansible.builtin.copy:
+    content: |
+      auto lo
+      iface lo inet loopback
 
-# Requires network-manager
-- name: "Create Storage VLAN {{ storage_vlan }}"
-  community.general.nmcli:
-    conn_name: "eno1.{{ storage_vlan }}"
-    never_default4: true
-    method6: "disabled"
-    state: "present"
-    type: "vlan"
-    vlandev: "eno1"
-    vlanid: "{{ storage_vlan }}"
-  notify: "Unmonitored reboot"
+      # The primary network interface
+      allow-hotplug eno1
 
-# Requires network-manager
-- name: "Disable non-DHCP interfaces"
-  community.general.nmcli:
-    conn_name: "eno1"
-    method4: "disabled"
-    method6: "disabled"
-    state: "present"
-    type: "ethernet"
-  notify: "Unmonitored reboot"
+      auto eno1.{{ server_vlan }}
+      iface eno1.{{ server_vlan }} inet dhcp
+
+      auto eno1.{{ storage_vlan }}
+      iface eno1.{{ storage_vlan }} inet dhcp
+    dest: /etc/network/interfaces
+    mode: "0644"
+  when: "'ifupdown' in ansible_facts.packages"
+
+- name: "Configure networking with NetworkManager"
+  when: "'NetworkManager' in ansible_facts.packages"
+  block:
+    - name: "Create Server VLAN {{ server_vlan }}"
+      community.general.nmcli:
+        conn_name: "eno1.{{ server_vlan }}"
+        method6: "disabled"
+        state: "present"
+        type: "vlan"
+        vlandev: "eno1"
+        vlanid: "{{ server_vlan }}"
+      notify: "Unmonitored reboot"
+
+    - name: "Create Storage VLAN {{ storage_vlan }}"
+      community.general.nmcli:
+        conn_name: "eno1.{{ storage_vlan }}"
+        never_default4: true
+        method6: "disabled"
+        state: "present"
+        type: "vlan"
+        vlandev: "eno1"
+        vlanid: "{{ storage_vlan }}"
+      notify: "Unmonitored reboot"
+
+    - name: "Disable non-DHCP interfaces"
+      community.general.nmcli:
+        conn_name: "eno1"
+        method4: "disabled"
+        method6: "disabled"
+        state: "present"
+        type: "ethernet"
+      notify: "Unmonitored reboot"
 ...

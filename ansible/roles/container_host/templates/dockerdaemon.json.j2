@@ -3,5 +3,11 @@
   "log-driver": "json-file",
   "log-opts": {
     "max-size": "100m"
-  }
+  },
+  "default-address-pools": [
+    {
+      "base": "172.22.0.0/16",
+      "size": 24
+    }
+  ]
 }

@@ -1,4 +1,26 @@
 ---
+##############################
+###### Software Section ######
+##############################
+- name: "Install additional packages"
+  when: ansible_facts['pkg_mgr'] != "atomic_container"
+  ansible.builtin.package:
+    state: "present"
+    name:
+      - "autofs"
+      - "bmon"
+      - "ca-certificates"
+      - "curl"
+      - "git"
+      - "gnupg"
+      - "htop"
+      - "iftop"
+      - "lsb-release"
+      - "lshw"
+      - "{{ 'nfs-utils' if ansible_facts['pkg_mgr'] | lower == 'dnf' else 'nfs-common' }}"
+      - "sudo"
+      - "slurm"
+
 ##########################
 ###### User Section ######
 ##########################
@@ -35,7 +57,9 @@
   no_log: true
 
 - name: "Check for oh-my-bash"
-  ansible.builtin.shell: "set -o pipefail && find /usr/local/share/oh-my-bash -name oh-my-bash.sh | grep -q ."
+  ansible.builtin.shell:
+    cmd: "set -o pipefail && find /usr/local/share/oh-my-bash -name oh-my-bash.sh | grep -q ."
+    executable: "/bin/bash"
   changed_when: false
   failed_when: "oh_my_bash_installed.rc != 0 and 'No such file or directory' not in oh_my_bash_installed.stderr"
   register: oh_my_bash_installed
@@ -97,27 +121,6 @@
       Requires=sys-devices-virtual-net-wg0.device
     insertafter: "\\[Unit\\]"
     path: "/etc/systemd/system/sshd.service"
-
-##############################
-###### Software Section ######
-##############################
-- name: "Install additional packages"
-  when: ansible_facts['pkg_mgr'] != "atomic_container"
-  ansible.builtin.package:
-    state: "present"
-    name:
-      - "autofs"
-      - "bmon"
-      - "ca-certificates"
-      - "curl"
-      - "gnupg"
-      - "htop"
-      - "iftop"
-      - "lsb-release"
-      - "lshw"
-      - "{{ 'nfs-utils' if ansible_facts['pkg_mgr'] | lower == 'dnf' else 'nfs-common' }}"
-      - "sudo"
-      - "slurm"
 
 #########################
 ###### SSH Section ######
