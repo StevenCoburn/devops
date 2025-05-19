@@ -25,7 +25,8 @@ services:
     shm_size: 256m
     tmpfs: /tmp/cache:size=500m # reduces SSD/SD Card wear
     devices:
-      - /dev/apex_0:/dev/apex_0 # Pass in the PCI Coral TPU
+      - /dev/apex_0:/dev/apex_0 # Use PCI Coral TPU for object detection
+      - /dev/dri/renderD128 # Use Intel iGPU for video decoding
     volumes:
       - ${nfsapps}/frigate/config.yml:/config/config.yml
       - ${nfsapps}/frigate:/media/frigate
