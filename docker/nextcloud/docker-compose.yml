@@ -34,8 +34,8 @@ services:
     ports:
       - 8083:80
     volumes:
-      - ${nfsapps}/nextcloud/app:/var/www/html
-      - ${nfsapps}/nextcloud/data:/var/www/html/data
+      - ${nfs_fast_apps}/nextcloud/app:/var/www/html
+      - ${nfs_fast_apps}/nextcloud/data:/var/www/html/data
       - ${nfsbackup}/nextcloud:/backups
     environment:
       NEXTCLOUD_TRUSTED_DOMAINS: drive.${DOMAIN}
@@ -78,7 +78,7 @@ services:
     security_opt: [no-new-privileges:true]
     networks: [internal-nextcloud]
     volumes:
-      - ${nfsapps}/nextcloud/db:/var/lib/postgresql/data
+      - ${nfs_fast_apps}/nextcloud/db:/var/lib/postgresql/data
       - ${nfsbackup}/nextcloud:/backup
     environment:
       POSTGRES_DB_FILE: /run/secrets/nextcloud_pg_name

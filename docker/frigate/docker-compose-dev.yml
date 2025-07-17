@@ -27,8 +27,8 @@ services:
     devices:
       - /dev/apex_0:/dev/apex_0 # Pass in the PCI Coral TPU
     volumes:
-      - ${nfsapps}/frigate-dev/config.yml:/config/config.yml
-      - ${nfsapps}/frigate-dev:/media/frigate
+      - ${nfs_slow_apps}/frigate-dev/config.yml:/config/config.yml
+      - ${nfs_slow_apps}/frigate-dev:/media/frigate
       - frigate-db-dev:/db
     networks:
       internal-iot-vlan:

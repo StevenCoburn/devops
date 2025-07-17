@@ -11,12 +11,12 @@ services:
       UID: ${NFS_PUID}
       GID: ${NFS_PGID}
     volumes:
-      - ${nfsapps}/dashy/conf.yml:/app/user-data/conf.yml
-      - ${nfsapps}/dashy/icons:/app/user-data/item-icons
-      - ${nfsapps}/dashy/JetBrainsMono-Regular.ttf:/app/user-data/fonts/JetBrainsMono-Regular.ttf
-      # - ${nfsapps}/dashy/favicon.ico:/app/dist/favicon.ico
-      # - ${nfsapps}/dashy/favicon.ico:/app/dist/img/icons/favicon-16x16.png
-      # - ${nfsapps}/dashy/favicon.ico:/app/dist/img/icons/apple-touch-icon-152x152.png
+      - ${nfs_fast_apps}/dashy/conf.yml:/app/user-data/conf.yml
+      - ${nfs_fast_apps}/dashy/icons:/app/user-data/item-icons
+      - ${nfs_fast_apps}/dashy/JetBrainsMono-Regular.ttf:/app/user-data/fonts/JetBrainsMono-Regular.ttf
+      # - ${nfs_fast_apps}/dashy/favicon.ico:/app/dist/favicon.ico
+      # - ${nfs_fast_apps}/dashy/favicon.ico:/app/dist/img/icons/favicon-16x16.png
+      # - ${nfs_fast_apps}/dashy/favicon.ico:/app/dist/img/icons/apple-touch-icon-152x152.png
     network_mode: bridge
     ports:
       - 8081:8080

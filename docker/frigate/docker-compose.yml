@@ -28,8 +28,8 @@ services:
       - /dev/apex_0:/dev/apex_0 # Use PCI Coral TPU for object detection
       - /dev/dri/renderD128 # Use Intel iGPU for video decoding
     volumes:
-      - ${nfsapps}/frigate/config.yml:/config/config.yml
-      - ${nfsapps}/frigate:/media/frigate
+      - ${nfs_slow_apps}/frigate/config.yml:/config/config.yml
+      - ${nfs_slow_apps}/frigate:/media/frigate
       - frigate-db:/db
     networks:
       internal-iot-vlan:
