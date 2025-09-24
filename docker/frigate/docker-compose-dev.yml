@@ -17,7 +17,7 @@ networks:
 
 services:
   frigate-dev:
-    image: ghcr.io/blakeblackshear/frigate:0.15.0
+    image: ghcr.io/blakeblackshear/frigate:0.16.1
     container_name: frigate-dev
     restart: unless-stopped
     privileged: false

@@ -25,7 +25,7 @@ volumes:
 
 services:
   nextcloud:
-    image: nextcloud:31.0.2-apache
+    image: nextcloud:31.0.9-apache
     container_name: nextcloud
     restart: unless-stopped
     privileged: false
@@ -92,7 +92,7 @@ services:
   # WOPI feature check: https://collabora.$DOMAIN/hosting/discovery
   # Admin interface: https://collabora.$DOMAIN/browser/dist/admin/admin.html
   collabora:
-    image: collabora/code:24.04.13.2.1
+    image: collabora/code:25.04.5.2.1
     container_name: collabora
     restart: unless-stopped
     cap_add:

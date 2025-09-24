@@ -17,7 +17,7 @@ networks:
 
 services:
   frigate:
-    image: ghcr.io/blakeblackshear/frigate:0.15.0
+    image: ghcr.io/blakeblackshear/frigate:0.16.1
     container_name: frigate
     restart: unless-stopped
     privileged: false
@@ -25,7 +25,7 @@ services:
     shm_size: 256m
     tmpfs: /tmp/cache:size=500m # reduces SSD/SD Card wear
     devices:
-      - /dev/apex_0:/dev/apex_0 # Use PCI Coral TPU for object detection
+      - /dev/apex_0 # Use PCI Coral TPU for object detection
       - /dev/dri/renderD128 # Use Intel iGPU for video decoding
     volumes:
       - ${nfs_slow_apps}/frigate/config.yml:/config/config.yml
