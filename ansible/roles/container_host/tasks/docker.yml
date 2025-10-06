@@ -43,7 +43,7 @@
     state: "started"
     masked: false
 
-- name: "Add {{ admin_user_name }} to docker group"
+- name: "Add user to docker group: {{ admin_user_name }}"
   ansible.builtin.user:
     append: true
     groups: "docker"
@@ -60,15 +60,25 @@
 
     - name: "Install Docker Compose v2 plugin"
       ansible.builtin.get_url:
-        url: "https://github.com/docker/compose/releases/download/v2.29.7/docker-compose-linux-{{ ansible_facts.architecture }}"
+        url: "https://github.com/docker/compose/releases/download/v2.40.0/docker-compose-linux-{{ ansible_facts.architecture }}"
         dest: "/usr/local/lib/docker/cli-plugins/docker-compose"
         mode: "0755"
-        checksum: "sha256:383ce6698cd5d5bbf958d2c8489ed75094e34a77d340404d9f32c4ae9e12baf0"
+        checksum: >-
+          {%- if ansible_facts.architecture == 'aarch64' -%}
+            sha256:fa99ca94c96c8cae4024493581a20049764ce723558991d0d1526c1c7b791a79
+          {%- else -%}
+            sha256:ca2ee9184773f8e0d21a3387320dabde4d853cd39dd3befd2ba2e05d9c81b72d
+          {%- endif -%}
 
     - name: "Install Docker Buildx plugin"
       ansible.builtin.get_url:
-        url: "https://github.com/docker/buildx/releases/download/v0.17.1/buildx-v0.17.1.linux-amd64"
+        url: "https://github.com/docker/buildx/releases/download/v0.29.0/buildx-v0.29.0.linux-{{ 'arm64' if ansible_facts.architecture == 'aarch64' else 'amd64' }}"
         dest: "/usr/local/lib/docker/cli-plugins/docker-buildx"
         mode: "0755"
-        checksum: "sha256:aa7a9778349e1a8ace685e4c51a1d33e7a9b0aa6925d1c625b09cb3800eba696"
+        checksum: >-
+          {%- if ansible_facts.architecture == 'aarch64' -%}
+            sha256:14e50940aef67c4b46f6b03a5ccc3851a30f883e751a61048a4bc80b8832a840
+          {%- else -%}
+            sha256:d02d47061bede1b90d34bf6562a5f39e686773e97cf9d00e7114b3c1e269e524
+          {%- endif -%}
 ...

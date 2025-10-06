@@ -36,14 +36,18 @@
       WantedBy=multi-user.target
     dest: "/etc/systemd/system/qemu-ga.service"
     mode: "0644"
-  when: ansible_facts['pkg_mgr'] | lower == 'atomic_container'
+  when:
+    - ansible_facts['pkg_mgr'] | lower == 'atomic_container'
+    - ansible_system_vendor | lower == 'qemu'
 
 - name: "QEMU-GA - Start QEMU Guest Agent"
   ansible.builtin.systemd_service:
     name: "qemu-ga.service"
     state: "started"
     enabled: true
-  when: ansible_facts['pkg_mgr'] | lower == 'atomic_container'
+  when:
+    - ansible_facts['pkg_mgr'] | lower == 'atomic_container'
+    - ansible_system_vendor | lower == 'qemu'
 
 - name: "AutoFS - Copy master template"
   ansible.builtin.template:
@@ -63,7 +67,7 @@
 
 - name: "AutoFS - Copy indirect maps template"
   ansible.builtin.template:
-    dest: "/etc/auto-{{ item.clientPath | basename }}.maps"
+    dest: "/etc/auto-{{ item.clientPath.split('/')[2:] | join('') }}.maps"
     force: true
     mode: "0644"
     src: "templates/auto-indirect.maps.j2"

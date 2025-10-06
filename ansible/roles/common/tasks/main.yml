@@ -43,18 +43,22 @@
 - name: "Add keys for '{{ admin_user_name }}'"
   ansible.posix.authorized_key:
     key: "{{ item }}"
+    path: "/home/{{ admin_user_name }}/{{ 'authorized_keys.d/ignition' if 'coreos' in group_names else 'authorized_keys' }}"
     state: "present"
     user: "{{ admin_user_name }}"
   loop: "{{ ssh_pub_keys }}"
-  no_log: true
+  loop_control:
+    label: "{{ item.split(' ', 2)[2] }}"
 
 - name: "Remove revoked keys for '{{ admin_user_name }}'"
   ansible.posix.authorized_key:
     key: "{{ item }}"
+    path: "/home/{{ admin_user_name }}/{{ 'authorized_keys.d/ignition' if 'coreos' in group_names else 'authorized_keys' }}"
     state: "absent"
     user: "{{ admin_user_name }}"
   loop: "{{ ssh_pub_keys_to_revoke }}"
-  no_log: true
+  loop_control:
+    label: "{{ item.split(' ', 2)[2] }}"
 
 - name: "Check for oh-my-bash"
   ansible.builtin.shell:

@@ -19,7 +19,11 @@ IgnoreRhosts yes
 PasswordAuthentication no
 PermitEmptyPasswords no
 AuthenticationMethods publickey
-AuthorizedKeysFile .ssh/authorized_keys
+{% if 'coreos' in group_names %}
+AuthorizedKeysFile .ssh/authorized_keys.d/ignition
+{% else %}
+AuthorizedKeysFile .ssh/authorized_keys 
+{% endif %}
 ChallengeResponseAuthentication no
 UsePAM yes
 X11Forwarding no

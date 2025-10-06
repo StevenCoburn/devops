@@ -7,6 +7,7 @@
     dest: "/etc/zincati/config.d/51-rollout-wariness.toml"
     mode: "0644"
 
+# Set update time to be between 7am and 2pm UTC on Saturdays (15 is exclusive)
 - name: "Zincati - Set update strategy"
   ansible.builtin.copy:
     content: |
@@ -14,8 +15,8 @@
       strategy = "periodic"
       [[updates.periodic.window]]
       days = [ "Sat" ]
-      start_time = "09:00"
-      length_minutes = 60
+        start_time = "{{ '%02d:00' | format(15 | random(start=7)) }}"
+        length_minutes = 60
     dest: "/etc/zincati/config.d/55-updates-strategy.toml"
     mode: "0644"
 

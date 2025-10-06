@@ -17,13 +17,13 @@
 
     - name: "Update GRUB if config has changed (fedora)"
       ansible.builtin.command: "/usr/sbin/grub2-mkconfig -o /boot/grub2/grub.cfg"
-      when: 
+      when:
         - grub_updated.changed
         - ansible_facts['os_family'] == "RedHat"
 
     - name: "Update GRUB if config has changed (debian)"
       ansible.builtin.command: /usr/sbin/update-grub
-      when: 
+      when:
         - grub_updated.changed
         - ansible_facts['os_family'] == "Debian"
 
@@ -74,6 +74,7 @@
       Name=eno1
   notify: "Unmonitored reboot"
 
+# Kept here for reference, but not currently in use. Use on systems with ifupdown.
 - name: Configure network interface with ifupdown (old school method)
   ansible.builtin.copy:
     content: |
@@ -90,10 +91,13 @@
       iface eno1.{{ storage_vlan }} inet dhcp
     dest: /etc/network/interfaces
     mode: "0644"
-  when: "'ifupdown' in ansible_facts.packages"
+  when: false
 
+# Fedora CoreOS uses NetworkManager, will add other OSs as needed
 - name: "Configure networking with NetworkManager"
-  when: "'NetworkManager' in ansible_facts.packages"
+  when:
+    - ansible_facts['os_family'] | lower == 'redhat'
+    - ansible_facts['pkg_mgr'] | lower == 'atomic_container'
   block:
     - name: "Create Server VLAN {{ server_vlan }}"
       community.general.nmcli:
