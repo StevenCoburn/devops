@@ -223,10 +223,10 @@
       when: refind_dir.changed
 
     - name: "Copy rEFInd config"
-      ansible.builtin.copy:
+      ansible.builtin.template:
         dest: "/boot/efi/EFI/refind/refind.conf"
         mode: "0700"
-        src: "{{ inventory_dir }}/templates/refind.conf"
+        src: "{{ inventory_dir }}/templates/refind.conf.j2"
       become: true
       when: refind_dir.changed
 

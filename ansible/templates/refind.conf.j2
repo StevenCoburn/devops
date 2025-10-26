@@ -187,6 +187,9 @@ use_nvram false
 #resolution 1440 900
 #resolution 3
 #resolution max
+{% if ansible_product_version == "Legion Go 8APU1" %}
+resolution 2560 1600
+{% endif %}
 
 # Enable touch screen support. If active, this feature enables use of
 # touch screen controls (as on tablets). Note, however, that not all
