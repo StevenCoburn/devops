@@ -17,6 +17,7 @@
   roles:
     - common
     - container_host
+    - docker_swarm
 
   pre_tasks:
     - name: "Preload Ansible SSH Key"

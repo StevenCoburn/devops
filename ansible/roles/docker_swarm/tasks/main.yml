@@ -1,0 +1,102 @@
+---
+# SOURCE: https://github.com/nextrevision/ansible-swarm-playbook/blob/master/swarm.yml
+- name: "Prompt for swarm advertise address"
+  ansible.builtin.pause:
+    prompt: "Enter the Docker Swarm advertise address (e.g., eno1 or IP address)"
+  register: "swarm_advertise_address"
+  run_once: true
+
+- name: "End early if no advertise address provided (no Docker Swarm needed)"
+  ansible.builtin.meta: "end_role"
+  when: swarm_advertise_address.user_input == ""
+
+- name: "Determine swarm status"
+  ansible.builtin.shell: set -o pipefail && docker info --format \{\{.Swarm.LocalNodeState\}\}
+  register: swarm_status
+  changed_when: false
+
+- name: "Create swarm_manager groups based on status"
+  ansible.builtin.add_host:
+    groups: "{{ 'swarm_manager_operational' if hostvars[item]['swarm_status']['stdout'] == 'active' else 'swarm_manager_bootstrap' }}"
+    hostname: "{{ item }}"
+  changed_when: false
+  loop: "{{ ansible_play_hosts }}"
+  when: item in groups['docker_swarm_manager']
+
+- name: "Create swarm_worker groups based on status"
+  ansible.builtin.add_host:
+    groups: "{{ 'swarm_worker_operational' if hostvars[item]['swarm_status']['stdout'] == 'active' else 'swarm_worker_bootstrap' }}"
+    hostname: "{{ item }}"
+  changed_when: false
+  loop: "{{ ansible_play_hosts }}"
+  when: item in groups['docker_swarm_worker']
+
+- name: "Initialize Swarm"
+  ansible.builtin.shell: |
+    set -o pipefail &&
+    docker swarm init \
+      --advertise-addr {{ swarm_advertise_address.user_input }} \
+      --default-addr-pool 172.18.0.0/16
+  changed_when: "'Swarm initialized' in swarm_init.stdout"
+  register: swarm_init
+  run_once: true
+  when:
+    - "'swarm_manager_operational' not in groups"
+    - inventory_hostname == groups['swarm_manager_bootstrap'][0]
+
+- name: "Add initialized manager to swarm_manager_operational group"
+  ansible.builtin.add_host:
+    groups: swarm_manager_operational
+    hostname: "{{ inventory_hostname }}"
+  changed_when: false
+  when:
+    - swarm_init.stdout is defined
+    - "'Swarm initialized' in swarm_init.stdout"
+    - inventory_hostname == groups['swarm_manager_bootstrap'][0]
+
+- name: "Retrieve swarm manager token"
+  ansible.builtin.shell: set -o pipefail && docker swarm join-token -q manager
+  changed_when: false
+  register: swarm_manager_token
+  run_once: true
+  when: inventory_hostname == (groups['swarm_manager_operational'][0])
+
+- name: "Retrieve swarm worker token"
+  ansible.builtin.shell: set -o pipefail && docker swarm join-token -q worker
+  changed_when: false
+  register: swarm_worker_token
+  run_once: true
+  when: inventory_hostname == (groups['swarm_manager_operational'][0])
+
+- name: "Join managers and workers to the swarm"
+  ansible.builtin.shell: |
+    set -o pipefail &&
+    docker swarm join \
+      --token {{ swarm_manager_token.stdout if inventory_hostname in groups['docker_swarm_manager'] else swarm_worker_token.stdout }} \
+      {{ swarm_advertise_address.user_input }}
+  changed_when: "'This node joined a swarm' in swarm_join.stdout"
+  register: swarm_join
+  when:
+    - inventory_hostname in (groups['swarm_manager_bootstrap'] | default([])) or
+      inventory_hostname in (groups['swarm_worker_bootstrap'] | default([]))
+    - inventory_hostname not in (groups['swarm_manager_operational'] | default([]))
+    - inventory_hostname not in (groups['swarm_worker_operational'] | default([]))
+
+- name: "Reset by leaving the swarm"
+  tags: ["never", "reset"]
+  ansible.builtin.shell: |
+    set -o pipefail &&
+    docker swarm leave --force
+  changed_when: "'Node left the swarm' in swarm_leave.stdout"
+  failed_when: "'This node is not part of a swarm' not in swarm_leave.stderr and swarm_leave.rc != 0"
+  register: swarm_leave
+
+- name: "Remove the gwbridge network if the machine left the swarm"
+  tags: ["never", "reset"]
+  ansible.builtin.shell: |
+    set -o pipefail &&
+    docker network rm docker_gwbridge
+  changed_when: "'docker_gwbridge' in swarm_network_rm.stdout"
+  register: swarm_network_rm
+  when: "'Node left the swarm' in swarm_leave.stdout"
+...
