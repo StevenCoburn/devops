@@ -8,7 +8,7 @@
   - [CoreOS Ignition](#coreos-ignition)
   - [Useful Links](#useful-links)
   - [Proxmox Auto-Generated Template](#proxmox-auto-generated-template)
-  - [Raspberry Pi with OLED Screen (i2c enablement) (UNFINISHED)](#raspberry-pi-with-oled-screen-i2c-enablement-unfinished)
+  - [Raspberry Pi with OLED Screen](#raspberry-pi-with-oled-screen)
 
 ## Ansible
 
@@ -89,34 +89,43 @@ first-boot provisioning.
 To use the template, create a full clone of the template (linked clones are untested). Modify the networking, disk size,
 CPU, memory, and PCI devices as needed.
 
-### Raspberry Pi with OLED Screen (i2c enablement) (UNFINISHED)
+### Raspberry Pi with OLED Screen
 
-i2c on the Raspberry Pi is enabled and exposed to the OS with device-tree.
+Each Raspberry Pi in the rackmount cluster includes a tiny 128x32 OLED screen that can be useful for displaying diagnostic information or general system information. These screens are connected via i2c which needs to be explicitly enabled in the OS. [Raspberry Pis use device-tree](https://www.raspberrypi.com/documentation/computers/configuration.html#device-trees-overlays-and-parameters) for such things.
 
-[Good info on device
-tree](https://www.raspberrypi.com/documentation/computers/configuration.html#device-trees-overlays-and-parameters)
+Fedora CoreOS is the OS of choice here because it's immutable and self-updating, meaning the base OS generally takes care of itself. [Fedora has official doc](https://docs.fedoraproject.org/en-US/fedora-coreos/provisioning-raspberry-pi4/#_installing_fcos_and_booting_via_u_boot) for provisioning CoreOS onto Raspberry Pis. I'm using the U-boot bootloader because it's faster to boot and device-tree works (it also works with EDK2, but it's slower). The instructions are listed out in the Fedora documentation, but for ease of use, I provision my SD cards from a Fedora (or any linux) host like so:
 
-[Setting up a CoreOS image for U-boot and Raspberry
-Pi](https://docs.fedoraproject.org/en-US/fedora-coreos/provisioning-raspberry-pi4/#_installing_fcos_and_booting_via_u_boot)
+1. `mkdir -p /tmp/RPi4boot/boot/efi`
+2. Download the proper dnf packages
+   1. `podman run --rm -v /tmp/RPi4boot:/tmp/RPi4boot:z fedora:42 dnf download --resolve --releasever=42 --forcearch=aarch64 --destdir=/tmp/RPi4boot/ uboot-images-armv8 bcm283x-firmware bcm283x-overlays`
+3. Extract the dnf packages and stage u-boot.bin
+   1. `podman run --rm -v /tmp/RPi4boot:/tmp/RPi4boot:z fedora:42 /bin/bash -c 'dnf install -y cpio; for rpm in /tmp/RPi4boot/*rpm; do rpm2cpio $rpm | cpio -idv -D /tmp/RPi4boot/; done; mv /tmp/RPi4boot/usr/share/uboot/rpi_arm64/u-boot.bin /tmp/RPi4boot/boot/efi/rpi-u-boot.bin'`
+4. Copy your config.ign to /tmp/RPi4boot
+5. Modify `/tmp/RPi4boot/boot/efi/config.txt`
+   1. Add or uncomment `dtparam=i2c_arm=on`
+   2. Comment out other dtparams that are not needed (e.g. for cameras)
+6. Confirm /dev/mmcblk0 is the correct disk, unmount any partitions, and create the disk
+   1. `sudo podman run --pull=always --privileged --rm -v /dev:/dev -v /run/udev:/run/udev -v /tmp/RPi4boot:/tmp/RPi4boot -w /tmp/RPi4boot quay.io/coreos/coreos-installer:release install -a aarch64 -s stable -i config.ign --append-karg nomodeset /dev/mmcblk0`
+7. Mount the ESP partition and copy RPi4boot EFI files to the SD card
+   1. `sudo podman run --privileged -it --rm -v /dev:/dev -v /run/udev:/run/udev -v /tmp/RPi4boot:/tmp/RPi4boot fedora:42 bash`
+      1. `dnf install -y util-linux jq rsync`
+      2. `mkdir /tmp/FCOSEFIpart`
+      3. `FCOSEFIPARTITION=$(lsblk /dev/mmcblk0 -J -oLABEL,PATH  | jq -r '.blockdevices[] | select(.label == "EFI-SYSTEM").path')`
+      4. `mount $FCOSEFIPARTITION /tmp/FCOSEFIpart`
+      5. `rsync -avh --ignore-existing /tmp/RPi4boot/boot/efi/ /tmp/FCOSEFIpart/`
+      6. `umount $FCOSEFIPARTITION`
 
 [Directions for setting up the OLED screens](https://github.com/UCTRONICS/U6143_ssd1306)
 
-When preparing the SD card:
+**NOTE**: OLED screens can and should be managed through containerization and not directly from the host. **TODO**: add documentation
 
-- Download and extract the RPMs as listed in the web docs
-- Customize RPi4boot/boot/efi/config.txt to change HDMI params and enable i2c
-- Flash the SD card and copy EFI files to it (which will include the customizes config.txt)
+Check i2c devices with:
 
-Below is done from freshly installed CoreOS
-
-- `sudo rpm-ostree install --apply-live i2c-tools`
 - `lsmod | grep i2c_`
-- `ls -l /sys/firmware/devicetree/base/soc`
+- `ls -l /sys/firmware/devicetree/base/soc | grep i2c`
 
-The Pi may need to be rebooted before *i2cdetect* will find devices
+For optional further proof / verification / troubleshooting:
 
-Expect i2c-1 device at least (may also see 20 and 21)
-
-`i2cdetect -l`
-
-`sudo rpm-ostree install --apply-live make gcc`
+- `sudo rpm-ostree install i2c-tools`
+- Reboot the Pi
+- `i2cdetect -l` - An **i2c-1** device indicates proper configuration, and there will likely also be an **i2c-20** or **i2c-21**
