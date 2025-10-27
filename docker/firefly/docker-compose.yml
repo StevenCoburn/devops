@@ -1,0 +1,75 @@
+volumes:
+  firefly-upload:
+    name: firefly-upload
+  firefly-db:
+    name: firefly-db
+
+networks:
+  external-bridge:
+    name: external-bridge
+    external: true
+  firefly_iii:
+    driver: bridge
+
+services:
+  firefly:
+    image: fireflyiii/core:latest
+    hostname: firefly
+    container_name: firefly
+    restart: unless-stopped
+    privileged: false
+    security_opt: [no-new-privileges:true]
+    environment:
+      APP_ENV: production
+      APP_KEY: SomeRandomStringOf32CharsExactly
+      DB_HOST: firefly-db
+      DB_CONNECTION: mysql
+      DB_DATABASE: firefly
+      DB_USERNAME: firefly
+      DB_PASSWORD: secret_firefly_password
+    volumes:
+      - firefly-upload:/var/www/html/storage/upload
+    networks:
+      - external-bridge
+      - firefly_iii
+    ports:
+      - 8084:8080
+    depends_on:
+      - firefly-db
+
+  firefly-db:
+    image: mariadb:lts
+    hostname: firefly-db
+    container_name: firefly-db
+    restart: unless-stopped
+    privileged: false
+    security_opt: [no-new-privileges:true]
+    environment:
+      MYSQL_RANDOM_ROOT_PASSWORD: yes
+      MYSQL_USER: firefly
+      MYSQL_PASSWORD: secret_firefly_password
+      MYSQL_DATABASE: firefly
+    networks:
+      - firefly_iii
+    volumes:
+      - firefly-db:/var/lib/mysql
+
+  # cron:
+  #   #
+  #   # To make this work, set STATIC_CRON_TOKEN in your .env file or as an environment variable and replace REPLACEME below
+  #   # The STATIC_CRON_TOKEN must be *exactly* 32 characters long
+  #   #
+  #   image: alpine
+  #   restart: always
+  #   container_name: firefly_iii_cron
+  #   privileged: false
+  #   security_opt: [no-new-privileges:true]
+  #   env_file: .env
+  #   command: sh -c "
+  #     apk add tzdata
+  #     && ln -s /usr/share/zoneinfo/${TZ} /etc/localtime
+  #     | echo \"0 3 * * * wget -qO- http://app:8080/api/v1/cron/REPLACEME;echo\" 
+  #     | crontab - 
+  #     && crond -f -L /dev/stdout"
+  #   networks:
+  #     - firefly_iii

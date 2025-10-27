@@ -1,0 +1,28 @@
+volumes:
+  actual_budget:
+    name: actual_budget
+
+networks:
+  external-bridge:
+    name: external-bridge
+    external: true
+
+services:
+  actual_budget:
+    image: ghcr.io/actualbudget/actual:latest
+    container_name: actual_budget
+    restart: unless-stopped
+    privileged: false
+    security_opt: [no-new-privileges:true]
+    networks:
+      - external-bridge
+    ports:
+      - 5006:5006
+    volumes:
+      - actual_budget:/data
+    healthcheck:
+      test: ['CMD-SHELL', 'node src/scripts/health-check.js']
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
