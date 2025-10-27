@@ -118,6 +118,7 @@
     - name: "Update apt cache and install some additional packages"
       ansible.builtin.apt:
         name:
+          - "i7z"
           - "ifupdown2"
           - "ipmitool"
           - "lm-sensors"
@@ -271,8 +272,10 @@
           # TV Tuner
           blacklist cx23885
 
+          {% if inventory_hostname != "sm847" %}
           # SATA Controllers
           blacklist ahci
+          {% endif %}
         dest: "/etc/modprobe.d/blacklist.conf"
         mode: "0644"
 
