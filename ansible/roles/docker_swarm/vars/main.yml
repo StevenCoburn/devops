@@ -1,0 +1,5 @@
+---
+docker_swarm_node_labels:
+  - node: "pi-alpha"
+    labels:
+      - "primary_manager=true"

@@ -82,6 +82,59 @@
     - inventory_hostname not in (groups['swarm_manager_operational'] | default([]))
     - inventory_hostname not in (groups['swarm_worker_operational'] | default([]))
 
+- name: "Set Docker Swarm node labels"
+  ansible.builtin.shell: |
+    set -o pipefail &&
+    docker node update {{ item.node }} \
+      {% for label in item.labels %} --label-add {{ label }}{% endfor %}
+  changed_when: false
+  delegate_to: "{{ groups['swarm_manager_operational'][0] }}"
+  failed_when: item.node not in swarm_node_labels.stdout
+  loop: "{{ docker_swarm_node_labels }}"
+  loop_control:
+    label: "{{ item.node }} --> {{ item.labels }}"
+  register: swarm_node_labels
+  run_once: true
+
+# Each node needs the config version of all custom docker networks
+- name: "Create Docker config networks for each static IP"
+  ansible.builtin.shell: |
+    set -o pipefail &&
+    docker network create \
+      --config-only \
+      --driver macvlan \
+      --subnet {{ primary_network_config.subnet }} \
+      --gateway {{ primary_network_config.gateway }} \
+      --ip-range {{ item.ip }}/32 \
+      --opt parent=eno1.{{ primary_network_config.vlan }} \
+      {{ item.network_name }}-{{ item.container_name }}-config
+  changed_when: "'already exists' not in config_network_rollout.stderr"
+  failed_when: "'already exists' not in config_network_rollout.stderr and config_network_rollout.rc != 0"
+  loop: "{{ docker_static_ips }}"
+  loop_control:
+    label: " Deploying config network {{ item.container_name }} ({{ item.ip }}) "
+  register: config_network_rollout
+  vars:
+    primary_network_config: "{{ docker_networks | selectattr('network_name', 'equalto', item.network_name) | first }}"
+
+# Only the manager needs to create the swarm-scoped networks, other nodes will get them automatically
+- name: "Configure swarm-level networks based on config versions (previous task)"
+  ansible.builtin.shell: |
+    set -o pipefail &&
+    docker network create \
+      --driver macvlan \
+      --scope swarm \
+      --config-from {{ item.network_name }}-{{ item.container_name }}-config \
+      {{ item.network_name }}-{{ item.container_name }}
+  changed_when: "'already exists' not in main_network_rollout.stderr"
+  failed_when: "'already exists' not in main_network_rollout.stderr and main_network_rollout.rc != 0"
+  loop: "{{ docker_static_ips }}"
+  loop_control:
+    label: " Deploying attachable network for {{ item.container_name }}"
+  register: main_network_rollout
+  run_once: true
+  when: inventory_hostname == (groups['swarm_manager_operational'][0])
+
 - name: "Reset by leaving the swarm"
   tags: ["never", "reset"]
   ansible.builtin.shell: |
@@ -91,6 +144,7 @@
   failed_when: "'This node is not part of a swarm' not in swarm_leave.stderr and swarm_leave.rc != 0"
   register: swarm_leave
 
+# TODO: add all the static IP networks (created above) to the removal tag
 - name: "Remove the gwbridge network if the machine left the swarm"
   tags: ["never", "reset"]
   ansible.builtin.shell: |
