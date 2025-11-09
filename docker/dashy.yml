@@ -2,10 +2,6 @@
 services:
   dashy:
     image: ghcr.io/lissy93/dashy:latest
-    container_name: dashy
-    restart: unless-stopped
-    privileged: false
-    security_opt: [no-new-privileges:true]
     environment:
       NODE_ENV: production
       UID: ${NFS_PUID}
@@ -17,7 +13,6 @@ services:
       # - ${nfs_fast_apps}/dashy/favicon.ico:/app/dist/favicon.ico
       # - ${nfs_fast_apps}/dashy/favicon.ico:/app/dist/img/icons/favicon-16x16.png
       # - ${nfs_fast_apps}/dashy/favicon.ico:/app/dist/img/icons/apple-touch-icon-152x152.png
-    network_mode: bridge
     ports:
       - 8081:8080
     healthcheck:
@@ -26,3 +21,8 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        max_attempts: 5
