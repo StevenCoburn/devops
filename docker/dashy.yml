@@ -1,0 +1,28 @@
+---
+services:
+  dashy:
+    image: ghcr.io/lissy93/dashy:latest
+    environment:
+      NODE_ENV: production
+      UID: ${remote_storage_user}
+      GID: ${remote_storage_user}
+    volumes:
+      - ${central_storage_location}/apps/dashy/conf.yml:/app/user-data/conf.yml
+      - ${central_storage_location}/apps/dashy/icons:/app/user-data/item-icons
+      - ${central_storage_location}/apps/dashy/JetBrainsMono-Regular.ttf:/app/user-data/fonts/JetBrainsMono-Regular.ttf
+      # - ${central_storage_location}/apps/dashy/favicon.ico:/app/dist/favicon.ico
+      # - ${central_storage_location}/apps/dashy/favicon.ico:/app/dist/img/icons/favicon-16x16.png
+      # - ${central_storage_location}/apps/dashy/favicon.ico:/app/dist/img/icons/apple-touch-icon-152x152.png
+    ports:
+      - 8081:8080
+    healthcheck:
+      test: ['CMD', 'node', '/app/services/healthcheck']
+      interval: 1m30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        max_attempts: 5
