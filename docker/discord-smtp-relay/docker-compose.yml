@@ -1,11 +1,11 @@
 ---
+# Docker Swarm Portainer bug: Containers built with Compose contain both Swarm and Compose labels at deploy time
+# ref: https://github.com/orgs/portainer/discussions/9926
+# workaround: Build with old build system --> DOCKER_BUILDKIT=0 docker compose build
 services:
   discord-smtp-relay:
-    container_name: discord-smtp-relay
     image: discord-smtp-relay:latest
     build: ./
-    network_mode: bridge
-    restart: unless-stopped
     environment:
       PYTHONUNBUFFERED: 1
       WEBHOOK_URL: ${DISCORD_INFO_HOOK}
@@ -15,3 +15,17 @@ services:
       # TLS_KEY: #optional
     ports:
       - 8025:8025
+    deploy:
+      mode: global
+      placement:
+        constraints: [node.role == manager]
+      resources:
+        limits:
+          cpus: '0.10'
+          memory: 50M
+        reservations:
+          cpus: '0.10'
+          memory: 50M
+      restart_policy:
+        condition: on-failure
+        max_attempts: 5
