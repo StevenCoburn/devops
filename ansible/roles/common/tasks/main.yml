@@ -40,10 +40,18 @@
     state: "present"
     uid: "{{ admin_user_uid }}"
 
+- name: "Ensure ssh directory exists"
+  ansible.builtin.file:
+    group: "{{ admin_user_name }}"
+    mode: "0700"
+    owner: "{{ admin_user_name }}"
+    path: "/home/{{ admin_user_name }}/.ssh"
+    state: "directory"
+
 - name: "Add keys for '{{ admin_user_name }}'"
   ansible.posix.authorized_key:
     key: "{{ item }}"
-    path: "/home/{{ admin_user_name }}/{{ 'authorized_keys.d/ignition' if 'coreos' in group_names else 'authorized_keys' }}"
+    path: "/home/{{ admin_user_name }}/.ssh/{{ 'authorized_keys.d/ignition' if 'coreos' in group_names else 'authorized_keys' }}"
     state: "present"
     user: "{{ admin_user_name }}"
   loop: "{{ ssh_pub_keys }}"
