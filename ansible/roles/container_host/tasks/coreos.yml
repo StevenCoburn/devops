@@ -20,6 +20,22 @@
     dest: "/etc/zincati/config.d/55-updates-strategy.toml"
     mode: "0644"
 
+# https://github.com/coreos/fedora-coreos-tracker/issues/1824
+# Raspberry Pi 4s running on SD card are TOO SLOW for some ostree operations :(
+- name: "Create ostree-finalize-staged.service.d directory to add increased timeout dropin"
+  ansible.builtin.file:
+    mode: "0755"
+    path: "/etc/systemd/system/ostree-finalize-staged.service.d"
+    state: "directory"
+
+- name: "Add increased timeout dropin for ostree-finalize-staged.service"
+  ansible.builtin.copy:
+    content: |
+      [Service]
+      TimeoutStopSec=15m
+    dest: "/etc/systemd/system/ostree-finalize-staged.service.d/timeout.conf"
+    mode: "0644"
+
 # This should be taken care of in main.yml once I figure out how to reboot only if coreos
 - name: "Install rpm-ostree packages"
   community.general.rpm_ostree_pkg:
