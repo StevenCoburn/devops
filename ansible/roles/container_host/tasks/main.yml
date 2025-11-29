@@ -49,35 +49,45 @@
     - ansible_facts['pkg_mgr'] | lower == 'atomic_container'
     - ansible_system_vendor | lower == 'qemu'
 
-- name: "AutoFS - Copy master template"
-  ansible.builtin.template:
-    dest: "/etc/auto.master"
-    force: true
-    mode: "0644"
-    src: "templates/auto.master.j2"
-  register: autofs_master
+- name: "AutoFS - Create creds directory"
+  ansible.builtin.file:
+    group: "root"
+    mode: "0600"
+    owner: "root"
+    path: "/etc/creds"
+    state: "directory"
 
-- name: "AutoFS - Copy direct map template"
-  ansible.builtin.template:
-    dest: "/etc/auto-direct.maps"
-    force: true
-    mode: "0644"
-    src: "templates/auto-direct.maps.j2"
-  register: autofs_direct
+- name: "Create cred files for CIFS mounts"
+  ansible.builtin.copy:
+    content: |
+      username={{ remote_storage_user }}
+      password={{ remote_storage_password }}
+    dest: "/etc/creds/{{ remote_storage_server }}"
+    mode: "0600"
+  register: cifs_cred_file
 
-- name: "AutoFS - Copy indirect maps template"
-  ansible.builtin.template:
-    dest: "/etc/auto-{{ item.clientPath.split('/')[2:] | join('') }}.maps"
-    force: true
+# This is mostly for postgres startup file permission check compatibility
+- name: "AutoFS - Modify /etc/auto.smb with specific UID, GID, and file/dir modes"
+  ansible.builtin.replace:
+    path: /etc/auto.smb
+    regexp: '^(\s*)opts=.*\$UID.*credentials=.*$'
+    replace: |
+      \1# Modified by Ansible: set uid, gid, file_mode, dir_mode
+      \1opts="$opts"',uid={{ admin_user_uid }},gid={{ admin_user_uid }},file_mode=0750,dir_mode=0750,credentials='"$creds"
+  register: custom_auto_smb
+
+- name: "AutoFS - Copy cifs automount mapping"
+  ansible.builtin.copy:
+    content: |
+      # CIFS automounting
+      /mnt/cifs  /etc/auto.smb  --timeout=300
+    dest: "/etc/auto.master.d/cifs.autofs"
     mode: "0644"
-    src: "templates/auto-indirect.maps.j2"
-  loop: "{{ nfs_indirect_map }}"
-  loop_control: { label: "{{ item.clientPath | basename }}" }
-  register: autofs_indirect
+  register: autofs_cifs
 
 - name: "AutoFS - Enable and start the service"
   ansible.builtin.systemd_service:
     enabled: true
     name: "autofs.service"
-    state: "{{ 'reloaded' if autofs_master.changed or autofs_direct.changed or autofs_indirect.changed else 'started' }}"
+    state: "{{ 'reloaded' if cifs_cred_file.changed or custom_auto_smb.changed or autofs_cifs.changed else 'started' }}"
 ...

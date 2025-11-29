@@ -1,7 +1,0 @@
-# Direct Mapping
-/-    /etc/auto-direct.maps
-
-# Indirect Mapping
-{% for indirect in nfs_indirect_map %}
-{{ indirect.clientPath }}    /etc/auto-{{ indirect.clientPath.split('/')[2:] | join('') }}.maps
-{% endfor %}
