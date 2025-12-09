@@ -1,5 +1,6 @@
 ---
 # SOURCE: https://github.com/nextrevision/ansible-swarm-playbook/blob/master/swarm.yml
+# NOTE: An active swarm manager (or any swarm manager in a new swarm) must be the first in the inventory list due to the reliance on run_once in this playbook
 - name: "Prompt for swarm advertise address"
   ansible.builtin.pause:
     prompt: "Enter the Docker Swarm advertise address (e.g., eno1 or IP address)"
