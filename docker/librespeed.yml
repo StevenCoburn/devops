@@ -1,0 +1,15 @@
+---
+services:
+  speedtest:
+    image: ghcr.io/linuxserver/librespeed:latest
+    ports:
+      - 8082:80
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          cpus: '1'
+          memory: 200M
+        reservations:
+          cpus: '1'
+          memory: 200M
