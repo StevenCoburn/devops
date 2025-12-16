@@ -97,6 +97,20 @@
   register: swarm_node_labels
   run_once: true
 
+# Use single quotes around {{ item.value }} to prevent issues with special characters (like $) in secrets
+- name: "Set Docker Swarm secrets"
+  ansible.builtin.shell: |
+    set -o pipefail &&
+    echo '{{ item.value }}' | docker secret create {{ item.name }} -
+  changed_when: "'already exists' not in docker_secrets_rollout.stderr"
+  delegate_to: "{{ groups['swarm_manager_operational'][0] }}"
+  failed_when: "'already exists' not in docker_secrets_rollout.stderr and docker_secrets_rollout.rc != 0"
+  loop: "{{ docker_secrets }}"
+  loop_control:
+    label: " Deploying secret {{ item.name }}"
+  register: docker_secrets_rollout
+  run_once: true
+
 # Each node needs the config version of all custom docker networks
 - name: "Create Docker config networks for each static IP"
   ansible.builtin.shell: |
