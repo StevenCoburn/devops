@@ -1,0 +1,136 @@
+---
+# NOTES:
+# - The Nextcloud container itself is constrained to x86_64 servers, those are more powerful compared to the pi cluster
+#   - the preference directive doesn't seem to work as intended
+# - According to https://help.nextcloud.com/t/apache-docker-behind-reverse-proxy/151754
+#   - When running rootless, you must manually provide a redis-session.ini and apache remoteip.conf
+#   - This is a much more robust solution to the APACHE_DISABLE_REWRITE_IP=1 environment variable
+# - On the Nextcloud container, set TRUSTED_PROXIES: <your_reverse_proxy_ip> only once during initial config.php population
+# - For major Postgres upgrades:
+#   - pg_dumpall -U ${nextcloud_pg_user} > /backup/dump.sql
+#   - psql -U ${nextcloud_pg_user} -f /backup/dump.sql ${nextcloud_pg_name}
+
+configs:
+  nextcloud-apache-remoteip:
+    external: true
+
+networks:
+  internal:
+    internal: true
+
+secrets:
+  nextcloud_admin_password:
+    external: true
+  nextcloud_admin_user:
+    external: true
+  nextcloud_pg_name:
+    external: true
+  nextcloud_pg_pass:
+    external: true
+  nextcloud_pg_user:
+    external: true
+
+volumes:
+  nextcloud-redis:
+    name: nextcloud-redis
+
+services:
+  nextcloud:
+    image: nextcloud:31.0.9-apache
+    networks: [internal]
+    user: "${remote_storage_user}"
+    ports:
+      - 8083:80
+    volumes:
+      - ${central_storage_location}/apps/nextcloud/app:/var/www/html
+      - ${central_storage_location}/apps/nextcloud/data:/var/www/html/data
+      - ${central_storage_location}/apps/nextcloud/redis-session.ini:/usr/local/etc/php/conf.d/redis-session.ini
+      - ${central_storage_location}/container-backups/nextcloud:/backups
+    environment:
+      NEXTCLOUD_TRUSTED_DOMAINS: drive.${DOMAIN}
+      OVERWRITEPROTOCOL: https
+      PHP_UPLOAD_LIMIT: 512M
+      REDIS_HOST: redis
+      POSTGRES_HOST: db
+      POSTGRES_DB_FILE: /run/secrets/nextcloud_pg_name
+      POSTGRES_USER_FILE: /run/secrets/nextcloud_pg_user
+      POSTGRES_PASSWORD_FILE: /run/secrets/nextcloud_pg_pass
+      NEXTCLOUD_ADMIN_PASSWORD_FILE: /run/secrets/nextcloud_admin_password
+      NEXTCLOUD_ADMIN_USER_FILE: /run/secrets/nextcloud_admin_user
+      NEXTCLOUD_DATADIR: /var/www/html/data
+    depends_on:
+      - db
+      - redis
+    secrets:
+      - nextcloud_admin_password
+      - nextcloud_admin_user
+      - nextcloud_pg_name
+      - nextcloud_pg_pass
+      - nextcloud_pg_user
+    configs:
+      - source: nextcloud-apache-remoteip
+        target: /etc/apache2/conf-enabled/remoteip.conf
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.platform.arch == x86_64]
+      restart_policy:
+        condition: on-failure
+        max_attempts: 5
+
+  db:
+    image: postgres:16
+    networks: [internal]
+    user: "${remote_storage_user}"
+    volumes:
+      - ${central_storage_location}/apps/nextcloud/db:/var/lib/postgresql/data
+      - ${central_storage_location}/container-backups/nextcloud:/backup
+    environment:
+      POSTGRES_DB_FILE: /run/secrets/nextcloud_pg_name
+      POSTGRES_USER_FILE: /run/secrets/nextcloud_pg_user
+      POSTGRES_PASSWORD_FILE: /run/secrets/nextcloud_pg_pass
+    healthcheck:
+      test: pg_isready -U $$(cat $$POSTGRES_USER_FILE) -d $$(cat $$POSTGRES_DB_FILE)
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    secrets:
+      - nextcloud_pg_name
+      - nextcloud_pg_pass
+      - nextcloud_pg_user
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        max_attempts: 5
+
+  # WOPI feature check: https://collabora.$DOMAIN/hosting/discovery
+  # Admin interface: https://collabora.$DOMAIN/browser/dist/admin/admin.html
+  collabora:
+    image: collabora/code:25.04.5.2.1
+    networks: [internal]
+    ports:
+      - 9980:9980
+    environment:
+      domain: drive.${DOMAIN}
+      extra_params: "--o:ssl.enable=false --o:ssl.termination=true"
+      dictionaries: en_US
+      DONT_GEN_SSL_CERT: "true"
+      #username: admin
+      #password: admin
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        max_attempts: 5
+
+  redis:
+    image: redis:7-alpine
+    networks: [internal]
+    volumes:
+      - nextcloud-redis:/data
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        max_attempts: 5
