@@ -1,0 +1,44 @@
+---
+networks:
+  internal:
+    internal: true
+
+services:
+  unifi-network-application:
+    image: lscr.io/linuxserver/unifi-network-application:10.0.162-ls111
+    volumes:
+      - ${central_storage_location}/apps/unifi/app:/config
+    networks: [internal]
+    ports:
+      - 3478:3478/udp # STUN
+      - 8080:8080 # device-to-controller communication
+      - 8443:8443 # web ui
+    environment:
+      PUID: ${remote_storage_user}
+      MEM_LIMIT: 1024
+      MEM_STARTUP: 1024
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    depends_on:
+      - unifi-db
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        max_attempts: 5
+
+  # Locked to 4.4.18 to support raspberry pi 4 cluster
+  unifi-db:
+    image: mongo:4.4.18
+    user: "${remote_storage_user}"
+    volumes:
+      - ${central_storage_location}/apps/unifi/db:/data/db
+    networks: [internal]
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        max_attempts: 5
