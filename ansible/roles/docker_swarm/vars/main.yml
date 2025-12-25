@@ -3,3 +3,8 @@ docker_swarm_node_labels:
   - node: "pi-alpha"
     labels:
       - "primary_manager=true"
+  - node: "docker-swarm-vm-2"
+    labels:
+      - "gpu=true"
+      - "intel_gpu=true"
+      - "coral_tpu=true"

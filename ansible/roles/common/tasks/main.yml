@@ -10,6 +10,7 @@
       - "autofs"
       - "bmon"
       - "ca-certificates"
+      - "cifs-utils"
       - "curl"
       - "git"
       - "gnupg"
@@ -18,6 +19,7 @@
       - "lsb-release"
       - "lshw"
       - "{{ 'nfs-utils' if ansible_facts['pkg_mgr'] | lower == 'dnf' else 'nfs-common' }}"
+      - "{{ 'samba-client' if ansible_facts['pkg_mgr'] | lower == 'dnf' else 'smbclient' }}"
       - "sudo"
       - "slurm"
 

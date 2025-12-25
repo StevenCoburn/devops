@@ -54,10 +54,34 @@
         regexp: '(eno[0-9]|ens[0-9]?[0-9]|enp[0-9]s[0-9]?[0-9]|enp[0-9][0-9]|eth[0-9])'
         replace: 'eno1'
       loop: "{{ netplan_files.results }}"
-      # no_log: true
       when:
         - "'netplan.io' in ansible_facts.packages"
         - item.stat.exists
+
+    # Debian 13 (trixie) uses ifupdown
+    - name: Configure network interface with ifupdown
+      ansible.builtin.copy:
+        content: |
+          # This file describes the network interfaces available on your system
+          # and how to activate them. For more information, see interfaces(5).
+
+          source /etc/network/interfaces.d/*
+
+          # The loopback network interface
+          auto lo
+          iface lo inet loopback
+
+          # The primary network interface
+          allow-hotplug eno1
+
+          auto eno1.{{ server_vlan }}
+          iface eno1.{{ server_vlan }} inet dhcp
+
+          auto eno1.{{ storage_vlan }}
+          iface eno1.{{ storage_vlan }} inet dhcp
+        dest: /etc/network/interfaces
+        mode: "0644"
+      when: "'ifupdown' in ansible_facts.packages"
 
 # Old school way to get MAC address was this:
 # MAC=$(cat /sys/class/net/$(ip route show default | awk '/default/ {print $5}')/address)
@@ -68,30 +92,11 @@
     mode: "0644"
     block: |
       [Match]
-      MACAddress={{ ansible_default_ipv4.macaddress }}
+      MACAddress={{ ansible_facts['default_ipv4']['macaddress'] }}
 
       [Link]
       Name=eno1
   notify: "Unmonitored reboot"
-
-# Kept here for reference, but not currently in use. Use on systems with ifupdown.
-- name: Configure network interface with ifupdown (old school method)
-  ansible.builtin.copy:
-    content: |
-      auto lo
-      iface lo inet loopback
-
-      # The primary network interface
-      allow-hotplug eno1
-
-      auto eno1.{{ server_vlan }}
-      iface eno1.{{ server_vlan }} inet dhcp
-
-      auto eno1.{{ storage_vlan }}
-      iface eno1.{{ storage_vlan }} inet dhcp
-    dest: /etc/network/interfaces
-    mode: "0644"
-  when: false
 
 # Fedora CoreOS uses NetworkManager, will add other OSs as needed
 - name: "Configure networking with NetworkManager"
