@@ -187,7 +187,7 @@ use_nvram false
 #resolution 1440 900
 #resolution 3
 #resolution max
-{% if ansible_product_version == "Legion Go 8APU1" %}
+{% if ansible_facts['product_version'] == "Legion Go 8APU1" %}
 resolution 2560 1600
 {% endif %}
 

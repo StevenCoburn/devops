@@ -3,10 +3,13 @@
 # Setup checklist:
 # - Enable SSH access
 # - Copy ansible key into ~/.ssh/authorized_keys
+#   - mkdir -m 0700 -p ~/.ssh; echo 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE0KPODnkXEBkk6JV7oMQDXaqcaAFIWhmRrgZAPGWNJU Ansible - 01SEP2023' | tee ~/.ssh/authorized_keys >/dev/null
 # - Allow passwordless sudo by adding `$USER ALL=(ALL) NOPASSWD: ALL` to /etc/sudoers
+#   - echo "$USER ALL=(ALL) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/$USER >/dev/null
 # - Run this playbook
-# - (TEMP) manually install extensions with gext install 307 1634 4356 4655 6109 4362 2087
-# - Setup /etc/fstab mounts for game drives (add 'uid=1000,gid=1000,discard' to fstab options and mount with ntfs3)
+# - Manually install extensions TODO: Ansiblize this
+#   - gext install 307 1634 4356 4655 6109 7065 4362 2087
+# - Setup /etc/fstab mounts for game drives (add 'uid=1000,gid=1000,discard' to fstab options if mounting ntfs3)
 # - Change hostname and password
 # - Change RDP password
 # - Setup cpu/gpu temperature probe and gpu usage monitor for resource monitor
@@ -29,7 +32,7 @@
   vars:
     jetbrainsmono_ver: "2.304"
     refind_ver: "0.14.2"
-    veracrypt_ver: "1.26.14"
+    veracrypt_ver: "1.26.24"
 
   handlers:
     - name: "Refresh font cache"
@@ -63,21 +66,8 @@
         state: "present"
         user: "{{ ansible_user }}"
       loop: "{{ ssh_pub_keys }}"
-      no_log: true
-
-    - name: "Add flatpak-beta repo for yubikey software"
-      community.general.flatpak_remote:
-        flatpakrepo_url: "https://flathub.org/beta-repo/flathub-beta.flatpakrepo"
-        name: "flathub-beta"
-        state: "present"
-      become: true
-
-    # This is needed because of a bug in pcsc
-    - name: "Install beta software with Flatpak"
-      community.general.flatpak:
-        name: ["com.yubico.yubioath"]
-        remote: "flathub-beta"
-      become: true
+      loop_control:
+        label: "{{ item.split(' ', 2)[2] }}"
 
     - name: "Install production software with Flatpak"
       community.general.flatpak:
@@ -89,6 +79,7 @@
           - com.obsproject.Studio
           - com.protonvpn.www
           - com.spotify.Client
+          - com.yubico.yubioath
           - net.davidotek.pupgui2
           - org.chromium.Chromium
           - org.freedesktop.Piper
@@ -135,7 +126,7 @@
       register: jetbrains_toolbox
 
     - name: "Launch jetbrains-toolbox to create desktop entry"
-      ansible.builtin.command: "{{ ansible_user_dir }}/.local/bin/jetbrains-toolbox"
+      ansible.builtin.command: "{{ ansible_facts['user_dir'] }}/.local/bin/jetbrains-toolbox"
       async: 1
       poll: 0
       failed_when: false
@@ -154,31 +145,16 @@
     - name: "Create jetbrains font directory"
       ansible.builtin.file:
         mode: "0755"
-        path: "{{ ansible_user_dir }}/.local/share/fonts/jetbrains"
+        path: "{{ ansible_facts['user_dir'] }}/.local/share/fonts/jetbrains"
         state: "directory"
 
     - name: "Install Jetbrains Mono font"
       ansible.builtin.unarchive:
-        dest: "{{ ansible_user_dir }}/.local/share/fonts/jetbrains"
+        dest: "{{ ansible_facts['user_dir'] }}/.local/share/fonts/jetbrains"
         include: "fonts/ttf/*"
         remote_src: true
         src: "https://download.jetbrains.com/fonts/JetBrainsMono-{{ jetbrainsmono_ver }}.zip"
       notify: "Refresh font cache"
-
-    # Temporary fix for apps not loading because of Wayland / Nvidia bugs
-    # https://discussion.fedoraproject.org/t/gdk-message-error-71-protocol-error-dispatching-to-wayland-display/127927/15
-    - name: "Create ~/.config/environment.d directory"
-      ansible.builtin.file:
-        mode: "0755"
-        path: "{{ ansible_user_dir }}/.config/environment.d"
-        state: "directory"
-
-    - name: "Change GSK_RENDERER via environment file"
-      ansible.builtin.copy:
-        dest: "{{ ansible_user_dir }}/.config/environment.d/gtk-wayland-fix.conf"
-        mode: "0644"
-        content: "GSK_RENDERER=ngl"
-      changed_when: false
 
     - name: "Create rEFInd directory"
       ansible.builtin.file:
@@ -227,7 +203,7 @@
 
     - name: "Get device name of /boot/efi mount"
       ansible.builtin.set_fact:
-        efi_dev: "{{ (ansible_mounts | selectattr('mount', 'equalto', '/boot/efi') | map(attribute='device') | first) | regex_replace('(p[0-9]|[0-9])$', '') }}"
+        efi_dev: "{{ (ansible_facts['mounts'] | selectattr('mount', 'equalto', '/boot/efi') | map(attribute='device') | first) | regex_replace('(p[0-9]|[0-9])$', '') }}"
       when: refind_dir.changed
 
     - name: "Add rEFInd to EFI boot menu"
@@ -265,24 +241,24 @@
     - name: "Create kitty config directory"
       ansible.builtin.file:
         mode: "0700"
-        path: "{{ ansible_user_dir }}/.config/kitty"
+        path: "{{ ansible_facts['user_dir'] }}/.config/kitty"
         state: "directory"
 
     - name: "Copy kitty terminal config"
       ansible.builtin.template:
-        dest: "{{ ansible_user_dir }}/.config/kitty/kitty.conf"
+        dest: "{{ ansible_facts['user_dir'] }}/.config/kitty/kitty.conf"
         mode: "0644"
         src: "{{ inventory_dir }}/templates/kitty.conf.j2"
 
     - name: "Download custom kitty icon"
       ansible.builtin.get_url:
-        dest: "{{ ansible_user_dir }}/.config/kitty/whiskers.png"
+        dest: "{{ ansible_facts['user_dir'] }}/.config/kitty/whiskers.png"
         mode: "0644"
         url: "https://github.com/samholmes/whiskers/blob/main/whiskers.png?raw=true"
 
     - name: "Copy kitty .desktop files to ~/.local/share/applications for read/write"
       ansible.builtin.copy:
-        dest: "{{ ansible_user_dir }}/.local/share/applications/{{ item }}"
+        dest: "{{ ansible_facts['user_dir'] }}/.local/share/applications/{{ item }}"
         mode: "0644"
         remote_src: true
         src: "/usr/share/applications/{{ item }}"
@@ -294,9 +270,9 @@
       community.general.ini_file:
         mode: "0644"
         option: "Icon"
-        path: "{{ ansible_user_dir }}/.local/share/applications/{{ item }}"
+        path: "{{ ansible_facts['user_dir'] }}/.local/share/applications/{{ item }}"
         section: "Desktop Entry"
-        value: "{{ ansible_user_dir }}/.config/kitty/whiskers.png"
+        value: "{{ ansible_facts['user_dir'] }}/.config/kitty/whiskers.png"
       loop:
         - "kitty.desktop"
         - "kitty-open.desktop"
@@ -304,13 +280,13 @@
     # Veracrypt icon is broken in Bazzite
     - name: "Download Veracrypt icon"
       ansible.builtin.get_url:
-        dest: "{{ ansible_user_dir }}/.config/veracrypt.png"
+        dest: "{{ ansible_facts['user_dir'] }}/.config/veracrypt.png"
         mode: "0644"
-        url: "https://github.com/veracrypt/VeraCrypt/blob/master/doc/html/VeraCrypt128x128.png?raw=true"
+        url: "https://github.com/veracrypt/VeraCrypt/blob/master/doc/html/en/VeraCrypt128x128.png?raw=true"
 
     - name: "Copy veracrypt .desktop file to ~/.local/share/applications for read/write"
       ansible.builtin.copy:
-        dest: "{{ ansible_user_dir }}/.local/share/applications/veracrypt.desktop"
+        dest: "{{ ansible_facts['user_dir'] }}/.local/share/applications/veracrypt.desktop"
         mode: "0644"
         remote_src: true
         src: "/usr/share/applications/veracrypt.desktop"
@@ -319,20 +295,20 @@
       community.general.ini_file:
         mode: "0644"
         option: "Icon"
-        path: "{{ ansible_user_dir }}/.local/share/applications/veracrypt.desktop"
+        path: "{{ ansible_facts['user_dir'] }}/.local/share/applications/veracrypt.desktop"
         section: "Desktop Entry"
-        value: "{{ ansible_user_dir }}/.config/veracrypt.png"
+        value: "{{ ansible_facts['user_dir'] }}/.config/veracrypt.png"
 
     # Fix found at https://bugzilla.redhat.com/show_bug.cgi?id=1892137#c26
     - name: "Create ~/.config/pkcs11/module"
       ansible.builtin.file:
         mode: "0755"
-        path: "{{ ansible_user_dir }}/.config/pkcs11/module"
+        path: "{{ ansible_facts['user_dir'] }}/.config/pkcs11/module"
         state: "directory"
 
     - name: "Copy OpenSC PKCS#11 module to user directory"
       ansible.builtin.copy:
-        dest: "{{ ansible_user_dir }}/.config/pkcs11/module/opensc.module"
+        dest: "{{ ansible_facts['user_dir'] }}/.config/pkcs11/module/opensc.module"
         mode: "0644"
         remote_src: true
         src: "/usr/share/p11-kit/modules/opensc.module"
@@ -340,7 +316,7 @@
     - name: "Suppress PKCS#11 messages in Firefox when YubiKey is plugged in"
       ansible.builtin.lineinfile:
         line: "disable-in: firefox"
-        path: "{{ ansible_user_dir }}/.config/pkcs11/module/opensc.module"
+        path: "{{ ansible_facts['user_dir'] }}/.config/pkcs11/module/opensc.module"
 
     - name: Ensure zsh is the default shell
       ansible.builtin.user:
@@ -351,14 +327,14 @@
     - name: "Clone Oh My Zsh"
       ansible.builtin.git:
         depth: 1
-        dest: "{{ ansible_user_dir }}/.oh-my-zsh"
+        dest: "{{ ansible_facts['user_dir'] }}/.oh-my-zsh"
         repo: "https://github.com/ohmyzsh/ohmyzsh.git"
         version: "master"
 
     - name: "Install oh-my-zsh plugins"
       ansible.builtin.git:
         depth: 1
-        dest: "{{ ansible_user_dir }}/.oh-my-zsh/custom/plugins/{{ item }}"
+        dest: "{{ ansible_facts['user_dir'] }}/.oh-my-zsh/custom/plugins/{{ item }}"
         repo: "https://github.com/zsh-users/{{ item }}.git"
         version: "master"
       loop:
@@ -369,20 +345,20 @@
     - name: "Install oh-my-zsh theme(s)"
       ansible.builtin.git:
         depth: 1
-        dest: "{{ ansible_user_dir }}/.oh-my-zsh/custom/themes/powerlevel10k"
+        dest: "{{ ansible_facts['user_dir'] }}/.oh-my-zsh/custom/themes/powerlevel10k"
         repo: "https://github.com/romkatv/powerlevel10k.git"
         version: "master"
 
     - name: "Copy zshrc"
       ansible.builtin.template:
-        dest: "{{ ansible_user_dir }}/.zshrc"
+        dest: "{{ ansible_facts['user_dir'] }}/.zshrc"
         mode: "0644"
         src: "{{ inventory_dir }}/templates/zshrc.j2"
 
     # p10k setup combo: y n n 2 1 4 2 1 1 1 2 1 2 2 2 n 1 y
     - name: "Copy powerlevel10k config"
       ansible.builtin.copy:
-        dest: "{{ ansible_user_dir }}/.p10k.zsh"
+        dest: "{{ ansible_facts['user_dir'] }}/.p10k.zsh"
         mode: "0644"
         src: "{{ inventory_dir }}/templates/p10k.zsh"
 
@@ -420,13 +396,13 @@
         - { key: '/com/github/Ory0n/Resource_Monitor/gpudisplaydevicename', value: "false" }
         - { key: '/com/github/Ory0n/Resource_Monitor/iconsposition', value: "'left'" }
         - { key: '/com/github/Ory0n/Resource_Monitor/iconsstatus', value: 'true' }
-        - { key: '/com/github/Ory0n/Resource_Monitor/netethstatus', value: 'false' }
+        - { key: '/com/github/Ory0n/Resource_Monitor/netethstatus', value: "{{ 'true' if ansible_facts['product_name'] == 'NUC12DCMi7' else 'false' }}" }
         - { key: '/com/github/Ory0n/Resource_Monitor/netunit', value: "'bits'" }
         - { key: '/com/github/Ory0n/Resource_Monitor/netunitmeasure', value: "'m'" }
-        - { key: '/com/github/Ory0n/Resource_Monitor/netwlanstatus', value: 'true' }
+        - { key: '/com/github/Ory0n/Resource_Monitor/netwlanstatus', value: "{{ 'false' if ansible_facts['product_name'] == 'NUC12DCMi7' else 'true' }}" }
         - { key: '/com/github/Ory0n/Resource_Monitor/thermalcputemperaturestatus', value: 'true' }
         - { key: '/com/github/Ory0n/Resource_Monitor/thermalgputemperaturestatus', value: 'false' }
-        - { key: '/com/github/Ory0n/Resource_Monitor/ramstatus', value: 'false' }
+        - { key: '/com/github/Ory0n/Resource_Monitor/ramstatus', value: 'true' }
         - { key: '/org/gnome/desktop/interface/color-scheme', value: "'prefer-dark'" }
         - { key: '/org/gnome/desktop/interface/gtk-theme', value: "'Adwaita-dark'" }
         - { key: '/org/gnome/desktop/interface/monospace-font-name', value: "'JetBrains Mono Medium 10'" }
@@ -472,8 +448,8 @@
         - { key: '/org/gnome/shell/extensions/espresso/has-battery', value: 'true' }
         - { key: '/org/gnome/shell/extensions/espresso/show-notifications', value: 'false' }
         - { key: '/org/gnome/shell/extensions/Logo-menu/menu-button-terminal', value: "'kitty'" }
-        - { key: '/org/gnome/shell/extensions/tilingshell/inner-gaps', value: '0' }
-        - { key: '/org/gnome/shell/extensions/tilingshell/outer-gaps', value: '0' }
+        - { key: '/org/gnome/shell/extensions/tilingshell/inner-gaps', value: 'uint32 0' }
+        - { key: '/org/gnome/shell/extensions/tilingshell/outer-gaps', value: 'uint32 0' }
         - { key: '/org/gnome/shell/extensions/top-bar-organizer/center-box-order', value: "['dateMenu']" }
         - { key: '/org/gnome/shell/extensions/top-bar-organizer/left-box-order', value: "['LogoMenu','activities', 'Resource_Monitor@Ory0n']" }
         - { key: '/org/gnome/shell/extensions/top-bar-organizer/right-box-order',

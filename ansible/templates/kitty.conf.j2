@@ -1,7 +1,7 @@
 #  Refer to [original documentation](https://sw.kovidgoyal.net/kitty/conf.html) for more options
 options
 
-{% if ansible_os_family != 'Darwin' %}
+{% if ansible_facts['os_family'] != 'Darwin' %}
 shell /usr/bin/zsh
 editor /usr/bin/code
 {% endif %}
@@ -19,7 +19,7 @@ term xterm-256color
 
 # Font config
 font_family      JetBrains Mono
-{% if ansible_os_family == 'Darwin' %}
+{% if ansible_facts['os_family'] == 'Darwin' %}
 font_size 18.0
 {% else %}
 font_size 16.0
