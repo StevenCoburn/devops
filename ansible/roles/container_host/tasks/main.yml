@@ -57,7 +57,7 @@
     path: "/etc/creds"
     state: "directory"
 
-- name: "Create cred files for CIFS mounts"
+- name: "AutoFS - Create cred files for CIFS mounts"
   ansible.builtin.copy:
     content: |
       username={{ remote_storage_user }}

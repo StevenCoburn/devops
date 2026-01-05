@@ -100,6 +100,7 @@
     - name: "Install software with rpm-ostree"
       community.general.rpm_ostree_pkg:
         name:
+          - autofs
           - code
           - gnome-themes-extra
           - goverlay
@@ -155,6 +156,53 @@
         remote_src: true
         src: "https://download.jetbrains.com/fonts/JetBrainsMono-{{ jetbrainsmono_ver }}.zip"
       notify: "Refresh font cache"
+
+    - name: "AutoFS - Create creds directory"
+      ansible.builtin.file:
+        group: "root"
+        mode: "0600"
+        owner: "root"
+        path: "/etc/creds"
+        state: "directory"
+      become: true
+
+    - name: "AutoFS - Create cred files for CIFS mounts"
+      ansible.builtin.copy:
+        content: |
+          username={{ remote_gaming_storage_user }}
+          password={{ remote_gaming_storage_password }}
+        dest: "/etc/creds/{{ remote_gaming_storage_server }}"
+        mode: "0600"
+      become: true
+      register: cifs_cred_file
+
+    # This option allows showing auto-mounted shares in nautilus
+    - name: "AutoFS - Modify /etc/auto.smb to add x-gvfs-show mount option"
+      ansible.builtin.replace:
+        path: /etc/auto.smb
+        regexp: '^opts="-fstype=cifs"'
+        replace: |
+          # Modified by Ansible: add x-gvfs-show
+          opts="-fstype=cifs,x-gvfs-show"
+      become: true
+      register: custom_auto_smb
+
+    - name: "AutoFS - Copy cifs automount mapping"
+      ansible.builtin.copy:
+        content: |
+          # CIFS automounting
+          /mnt/cifs  /etc/auto.smb  --timeout=300
+        dest: "/etc/auto.master.d/cifs.autofs"
+        mode: "0644"
+      become: true
+      register: autofs_cifs
+
+    - name: "AutoFS - Enable and start the service"
+      ansible.builtin.systemd_service:
+        enabled: true
+        name: "autofs.service"
+        state: "{{ 'reloaded' if cifs_cred_file.changed or custom_auto_smb.changed or autofs_cifs.changed else 'started' }}"
+      become: true
 
     - name: "Create rEFInd directory"
       ansible.builtin.file:
