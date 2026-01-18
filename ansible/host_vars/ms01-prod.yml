@@ -1,0 +1,6 @@
+---
+interfaces:
+  management: enp89s0
+  storage: enp2s0f0np0
+  containers: enp2s0f1np1
+...

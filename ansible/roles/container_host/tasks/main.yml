@@ -38,7 +38,7 @@
     mode: "0644"
   when:
     - ansible_facts['pkg_mgr'] | lower == 'atomic_container'
-    - ansible_system_vendor | lower == 'qemu'
+    - ansible_facts['system_vendor'] | lower == 'qemu'
 
 - name: "QEMU-GA - Start QEMU Guest Agent"
   ansible.builtin.systemd_service:
@@ -47,7 +47,7 @@
     enabled: true
   when:
     - ansible_facts['pkg_mgr'] | lower == 'atomic_container'
-    - ansible_system_vendor | lower == 'qemu'
+    - ansible_facts['system_vendor'] | lower == 'qemu'
 
 - name: "AutoFS - Create creds directory"
   ansible.builtin.file:

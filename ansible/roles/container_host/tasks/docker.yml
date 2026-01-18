@@ -56,27 +56,27 @@
         state: "directory"
         mode: "0755"
 
-    - name: "Install Docker Compose v2 plugin"
+    - name: "Install Docker Compose v5 plugin"
       ansible.builtin.get_url:
-        url: "https://github.com/docker/compose/releases/download/v2.40.3/docker-compose-linux-{{ ansible_facts.architecture }}"
+        url: "https://github.com/docker/compose/releases/download/v5.0.1/docker-compose-linux-{{ ansible_facts.architecture }}"
         dest: "/usr/local/lib/docker/cli-plugins/docker-compose"
         mode: "0755"
         checksum: >-
           {%- if ansible_facts.architecture == 'aarch64' -%}
-            sha256:d26373b19e89160546d15407516cc59f453030d9bc5b43ba7faf16f7b4980137
+            sha256:e3b36491a75f92c35ebfbbe6e4741bd2429664edf3971427983d67c0b21e7d1d
           {%- else -%}
-            sha256:dba9d98e1ba5bfe11d88c99b9bd32fc4a0624a30fafe68eea34d61a3e42fd372
+            sha256:cdc1df64412ed009312afbc044b3625144d06c07736e2f7a77fb0460531b9327
           {%- endif -%}
 
     - name: "Install Docker Buildx plugin"
       ansible.builtin.get_url:
-        url: "https://github.com/docker/buildx/releases/download/v0.30.0/buildx-v0.30.0.linux-{{ 'arm64' if ansible_facts.architecture == 'aarch64' else 'amd64' }}"
+        url: "https://github.com/docker/buildx/releases/download/v0.30.1/buildx-v0.30.1.linux-{{ 'arm64' if ansible_facts.architecture == 'aarch64' else 'amd64' }}"
         dest: "/usr/local/lib/docker/cli-plugins/docker-buildx"
         mode: "0755"
         checksum: >-
           {%- if ansible_facts.architecture == 'aarch64' -%}
-            sha256:f8e060a1a1e659d1c919d440652775320e8c2998b051eb4b5845bfcee9d85696
+            sha256:31d012d52d6df68aef4b55db62330967b562811f0de30cdfaa4505f314797c76
           {%- else -%}
-            sha256:460680948a25b80e62ffe085cd2d7ef4088540f3f3f58734b445a31534198240
+            sha256:c37114fcd034025ec68e224657c8a5a850df472ded3ddcbca75ad3a7ebb9710d
           {%- endif -%}
 ...

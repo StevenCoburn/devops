@@ -97,12 +97,14 @@
       [Link]
       Name=eno1
   notify: "Unmonitored reboot"
+  when: ansible_facts['system_vendor'] | lower == 'qemu'
 
 # Fedora CoreOS uses NetworkManager, will add other OSs as needed
-- name: "Configure networking with NetworkManager"
+- name: "Configure virtualized networking with NetworkManager"
   when:
     - ansible_facts['os_family'] | lower == 'redhat'
     - ansible_facts['pkg_mgr'] | lower == 'atomic_container'
+    - ansible_facts['system_vendor'] | lower == 'qemu'
   block:
     - name: "Create Server VLAN {{ server_vlan }}"
       community.general.nmcli:
@@ -133,4 +135,40 @@
         state: "present"
         type: "ethernet"
       notify: "Unmonitored reboot"
+
+- name: "Configure physical networking with NetworkManager"
+  when:
+    - ansible_facts['os_family'] | lower == 'redhat'
+    - ansible_facts['pkg_mgr'] | lower == 'atomic_container'
+    - ansible_facts['system_vendor'] | lower != 'qemu'
+  block:
+    - name: "Configure network names, IPv4 and IPv6 methods, and default routes"
+      community.general.nmcli:
+        conn_name: "{{ item.key }}"
+        ifname: "{{ item.value }}"
+        method4: "{{ 'disabled' if item.key == 'containers' else 'auto' }}"
+        method6: "disabled"
+        never_default4: "{{ 'false' if item.key == 'management' else 'true' }}"
+        state: "present"
+        type: "ethernet"
+      loop: "{{ interfaces | dict2items }}"
+      loop_control:
+        label: " {{ item.value }} --> {{ item.key }}"
+      notify: "Reboot Server"
+
+    - name: "Create systemd network link to define altnames for interfaces"
+      ansible.builtin.copy:
+        content: |
+          [Match]
+          MACAddress={{ ansible_facts[item.value].macaddress }}
+
+          [Link]
+          AlternativeNamesPolicy=
+          AlternativeName={{ item.key }}
+        dest: "/etc/systemd/network/50-{{ item.key }}.link"
+        mode: "0644"
+      loop: "{{ interfaces | dict2items }}"
+      loop_control:
+        label: " {{ item.value }} --> {{ item.key }}"
+      notify: "Reboot Server"
 ...

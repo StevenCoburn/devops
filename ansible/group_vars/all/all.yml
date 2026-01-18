@@ -1,4 +1,7 @@
 ---
 # Set host_domain var to the domain search domain in your environment
 ansible_host: "{{inventory_hostname}}.{{host_domain}}"
+
+# WORKAROUND: https://github.com/ansible/ansible/issues/86122
+ansible_ssh_common_args: '-o "SetEnv TERM=dumb"'
 ...

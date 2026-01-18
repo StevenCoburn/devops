@@ -7,6 +7,11 @@
     dest: "/etc/zincati/config.d/51-rollout-wariness.toml"
     mode: "0644"
 
+- name: "Check if zincati update strategy file exists"
+  ansible.builtin.stat:
+    path: "/etc/zincati/config.d/55-updates-strategy.toml"
+  register: container_host_zincati_update_strategy_file
+
 # Set update time to be between 7am and 2pm UTC on Saturdays (15 is exclusive)
 - name: "Zincati - Set update strategy"
   ansible.builtin.copy:
@@ -19,6 +24,15 @@
         length_minutes = 60
     dest: "/etc/zincati/config.d/55-updates-strategy.toml"
     mode: "0644"
+  when: not container_host_zincati_update_strategy_file.stat.exists
+
+- name: "Force lower screen resolution to play nicely with vPro/AMT KVM"
+  ansible.builtin.command:
+    cmd: "rpm-ostree kargs --unchanged-exit-77 --append-if-missing=video=1280x720"
+  changed_when: container_host_set_kargs.rc == 0
+  failed_when: container_host_set_kargs.rc not in [0, 77]
+  register: container_host_set_kargs
+  when: ansible_facts['system_vendor'] | lower != 'qemu'
 
 # https://github.com/coreos/fedora-coreos-tracker/issues/1824
 # Raspberry Pi 4s running on SD card are TOO SLOW for some ostree operations :(
@@ -44,11 +58,27 @@
       - "bmon"
       - "htop"
       - "iftop"
+      - "{{ 'lm_sensors' if ansible_facts['system_vendor'] | lower != 'qemu' else '' }}"
       - "samba-client"
       # RPM Fusion repos - Only useful for Nvidia drivers
       # - "https://download1.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-{{ ansible_distribution_major_version }}.noarch.rpm"
       # - "https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-{{ ansible_distribution_major_version }}.noarch.rpm"
   notify: "Reboot Server"
+
+- name: "Create lm_sensors config file to expose more hardware to monitoring tools"
+  ansible.builtin.copy:
+    content: |
+      # This file is sourced by /etc/init.d/lm_sensors and defines the modules to
+      # be loaded/unloaded.
+      #
+      # The format of this file is a shell script that simply defines variables:
+      # HWMON_MODULES for hardware monitoring driver modules, and optionally
+      # BUS_MODULES for any required bus driver module (for example for I2C or SPI).
+
+      HWMON_MODULES="coretemp nct6775"
+    dest: "/etc/sysconfig/lm_sensors"
+    mode: "0644"
+  when: ansible_facts['system_vendor'] == 'Micro Computer (HK) Tech Limited'
 
 - name: "Run handlers"
   ansible.builtin.meta: flush_handlers

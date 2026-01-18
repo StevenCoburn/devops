@@ -1,8 +1,7 @@
 variant: fcos
-version: 1.4.0
+version: 1.6.0
 kernel_arguments:
   should_exist:
-    - enforcing=0
     - net.ipv4.ip_forward=1
     - net.bridge.bridge-nf-call-iptables=1
     - net.bridge.bridge-nf-call-ip6tables=1
