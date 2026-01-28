@@ -1,4 +1,4 @@
-# Before running, change the volume throughout this file
+# Before running, find and replace the src-volume the volume throughout this file
 
 # To backup the volume:
   # docker compose run backup && docker compose rm -fv
@@ -9,21 +9,27 @@
 
 ---
 volumes:
-  plex-db:
-    name: plex-db
+  remote-backup-location:
+    name: remote-backup-location
+    driver_opts:
+      type: nfs
+      o: addr=${remote_storage_server},nfsvers=4.2,soft,nolock,rw
+      device: ":${remote_fast_location}/backups/containers"
+  src-volume:
+    name: src-volume
     external: true
 
 services:
   backup:
     image: alpine
     volumes:
-      - plex-db:/volume
-      - ${nfsbackup}/manual:/backup
-    command: sh -c "mkdir -p /backup/plex-db && cd /volume && tar -cvf /backup/plex-db/$$(date '+%Y-%m-%d-%H%M').tar ."
+      - src-volume:/src
+      - remote-backup-location:/dest
+    command: sh -c "mkdir -p /dest/manual/src-volume && cd /src && tar -cvf /dest/manual/src-volume/$$(date '+%Y-%m-%d-%H%M').tar ."
 
   restore:
     image: alpine
     volumes:
-      - plex-db:/volume
-      - ${nfsbackup}/manual:/backup
-    command: sh -c "tar xvf $$(ls -t /backup/plex-db/* | head -1) -C /volume"
+      - src-volume:/src
+      - remote-backup-location:/dest
+    command: sh -c "tar xvf $$(ls -t /dest/manual/src-volume/* | head -1) -C /src"
