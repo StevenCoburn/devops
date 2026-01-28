@@ -9,21 +9,21 @@
 
 ---
 volumes:
-  plex-db:
-    name: plex-db
+  frigate-db:
+    name: frigate-db
     external: true
 
 services:
   backup:
     image: alpine
     volumes:
-      - plex-db:/volume
-      - ${nfsbackup}/manual:/backup
-    command: sh -c "mkdir -p /backup/plex-db && cd /volume && tar -cvf /backup/plex-db/$$(date '+%Y-%m-%d-%H%M').tar ."
+      - frigate-db:/volume
+      - ${central_storage_location}/container-backups/manual:/backup
+    command: sh -c "mkdir -p /backup/frigate-db && cd /volume && tar -cvf /backup/frigate-db/$$(date '+%Y-%m-%d-%H%M').tar ."
 
   restore:
     image: alpine
     volumes:
-      - plex-db:/volume
-      - ${nfsbackup}/manual:/backup
-    command: sh -c "tar xvf $$(ls -t /backup/plex-db/* | head -1) -C /volume"
+      - frigate-db:/volume
+      - ${central_storage_location}/container-backups/manual:/backup
+    command: sh -c "tar xvf $$(ls -t /backup/frigate-db/* | head -1) -C /volume"
