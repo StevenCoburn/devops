@@ -1,4 +1,8 @@
 ---
+networks:
+  external-bridge:
+    name: external-bridge
+
 services:
   dashy:
     image: ghcr.io/lissy93/dashy:latest
@@ -8,21 +12,13 @@ services:
     security_opt: [no-new-privileges:true]
     environment:
       NODE_ENV: production
-      UID: ${NFS_PUID}
-      GID: ${NFS_PGID}
     volumes:
-      - ${nfs_fast_apps}/dashy/conf.yml:/app/user-data/conf.yml
-      - ${nfs_fast_apps}/dashy/icons:/app/user-data/item-icons
-      - ${nfs_fast_apps}/dashy/JetBrainsMono-Regular.ttf:/app/user-data/fonts/JetBrainsMono-Regular.ttf
-      # - ${nfs_fast_apps}/dashy/favicon.ico:/app/dist/favicon.ico
-      # - ${nfs_fast_apps}/dashy/favicon.ico:/app/dist/img/icons/favicon-16x16.png
-      # - ${nfs_fast_apps}/dashy/favicon.ico:/app/dist/img/icons/apple-touch-icon-152x152.png
-    network_mode: bridge
+      - ${local_apps_location}/dashy/conf.yml:/app/user-data/conf.yml
+      - ${local_apps_location}/dashy/icons:/app/user-data/item-icons
+      - ${local_apps_location}/dashy/JetBrainsMono-Regular.ttf:/app/user-data/fonts/JetBrainsMono-Regular.ttf
+    networks: [external-bridge]
     ports:
       - 8081:8080
     healthcheck:
       test: ['CMD', 'node', '/app/services/healthcheck']
-      interval: 1m30s
-      timeout: 10s
-      retries: 3
       start_period: 10s
