@@ -8,8 +8,7 @@ services:
     image: portainer/portainer-ce:latest
     container_name: portainer
     restart: always
-    privileged: false
-    security_opt: [no-new-privileges:true]
+    privileged: true # Only required because selinux (:z doesn't work)
     network_mode: bridge
     ports:
       - 9000:9000
