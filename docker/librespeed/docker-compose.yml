@@ -1,4 +1,8 @@
 ---
+volumes:
+  librespeed:
+    name: librespeed
+
 services:
   speedtest:
     image: ghcr.io/linuxserver/librespeed:latest
@@ -8,3 +12,5 @@ services:
     network_mode: bridge
     ports:
       - 8082:80
+    volumes:
+      - librespeed:/config
