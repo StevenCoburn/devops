@@ -18,14 +18,13 @@ services:
     ports:
       - 9001:9000
     volumes:
-      - ${nfs_fast_apps}/mealie/app:/app/data/
+      - ${central_storage_location}/apps/mealie/app:/app/data/
     environment:
       BASE_URL: https://recipes.${DOMAIN}
       TOKEN_TIME: 4
       MAX_WORKERS: 4
       ALLOW_SIGNUP: false
-      # PUID: ${NFS_PUID}
-      # PGID: ${NFS_PGID}
+      PUID: ${remote_storage_user}
       TZ: ${TZ}
       WEB_CONCURRENCY: 1
       DB_ENGINE: postgres
@@ -44,8 +43,9 @@ services:
     privileged: false
     security_opt: [no-new-privileges:true]
     networks: [internal-mealie]
+    user: "${remote_storage_user}"
     volumes:
-      - ${nfs_fast_apps}/mealie/db:/var/lib/postgresql/data
+      - ${central_storage_location}/apps/mealie/db:/var/lib/postgresql/data
     environment:
       POSTGRES_DB: mealie
       POSTGRES_USER: mealie
