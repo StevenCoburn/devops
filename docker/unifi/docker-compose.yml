@@ -1,24 +1,47 @@
 ---
+networks:
+  external-bridge:
+    name: external-bridge
+    external: true
+  internal-unifi:
+    name: internal-unifi
+    internal: true
+
 services:
-  unifi:
-    image: linuxserver/unifi-controller:latest
-    container_name: unifi-controller
-    mem_limit: 3192m
+  unifi-network-application:
+    image: lscr.io/linuxserver/unifi-network-application:10.0.162-ls111
+    container_name: unifi-network-application
     restart: unless-stopped
     privileged: false
     security_opt: [no-new-privileges:true]
     volumes:
-      - ${nfs_fast_apps}/unifi:/config
-    network_mode: bridge
+      - ${central_storage_location}/apps/unifi/app:/config
+    networks: [external-bridge, internal-unifi]
     ports:
       - 3478:3478/udp # STUN
       - 8080:8080 # device-to-controller communication
       - 8443:8443 # web ui
     environment:
-      - PUID=${NFS_PUID}
-      - PGID=${NFS_PGID}
+      PUID: ${remote_storage_user}
+      MEM_LIMIT: 1024
+      MEM_STARTUP: 1024
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080"]
       interval: 30s
       timeout: 10s
       retries: 5
+    depends_on:
+      - unifi-db
+
+  # Locked to 4.4.18 to support raspberry pi 4 cluster
+  unifi-db:
+    image: mongo:4.4.18
+    container_name: unifi-db
+    restart: unless-stopped
+    privileged: false
+    security_opt: [no-new-privileges:true]
+    user: "${remote_storage_user}"
+    volumes:
+      # TODO: Mount the configdb volume as well to prevent the random string volume being created
+      - ${central_storage_location}/apps/unifi/db:/data/db
+    networks: [internal-unifi]
