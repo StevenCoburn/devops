@@ -8,7 +8,7 @@ networks:
     name: ${iot_net_name}
     driver: macvlan
     driver_opts:
-      parent: eno1.${iot_net_vlan}
+      parent: containers.${iot_net_vlan}
     ipam:
       driver: default
       config:
@@ -20,15 +20,18 @@ services:
     image: ghcr.io/blakeblackshear/frigate:0.16.1
     container_name: frigate-dev
     restart: unless-stopped
-    privileged: false
+    # https://docs.frigate.video/configuration/hardware_acceleration_video/#configuring-intel-gpu-stats-in-docker
+    # Run privileged to allow access to iGPU metrics (the kernel.perf_event_paranoid setting did not fix this)
+    privileged: true
     security_opt: [no-new-privileges:true]
-    shm_size: 256m
+    shm_size: 512m
     tmpfs: /tmp/cache:size=500m # reduces SSD/SD Card wear
     devices:
-      - /dev/apex_0:/dev/apex_0 # Pass in the PCI Coral TPU
+      # - /dev/apex_0 # Use PCI Coral TPU for object detection
+      - /dev/dri/renderD128 # Use Intel iGPU for video decoding
     volumes:
-      - ${nfs_slow_apps}/frigate-dev/config.yml:/config/config.yml
-      - ${nfs_slow_apps}/frigate-dev:/media/frigate
+      - ${central_storage_location}/frigate-dev/config.yml:/config/config.yml
+      - ${central_storage_location}/frigate-dev:/media/frigate
       - frigate-db-dev:/db
     networks:
       internal-iot-vlan:
