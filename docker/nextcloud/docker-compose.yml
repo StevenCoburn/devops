@@ -7,18 +7,6 @@ networks:
     name: internal-nextcloud
     internal: true
 
-secrets:
-  nextcloud_admin_password:
-    file: ${nfssecrets}/nextcloud_admin_password
-  nextcloud_admin_user:
-    file: ${nfssecrets}/nextcloud_admin_user
-  nextcloud_pg_name:
-    file: ${nfssecrets}/nextcloud_pg_name
-  nextcloud_pg_pass:
-    file: ${nfssecrets}/nextcloud_pg_pass
-  nextcloud_pg_user:
-    file: ${nfssecrets}/nextcloud_pg_user
-
 volumes:
   nextcloud-redis:
     name: nextcloud-redis
@@ -30,64 +18,62 @@ services:
     restart: unless-stopped
     privileged: false
     security_opt: [no-new-privileges:true]
+    user: "${remote_storage_user}"
     networks: [external-bridge, internal-nextcloud]
     ports:
       - 8083:80
     volumes:
-      - ${nfs_fast_apps}/nextcloud/app:/var/www/html
-      - ${nfs_fast_apps}/nextcloud/data:/var/www/html/data
-      - ${nfsbackup}/nextcloud:/backups
+      - ${central_storage_location}/apps/nextcloud/app:/var/www/html
+      - ${central_storage_location}/apps/nextcloud/data:/var/www/html/data
+      - ${central_storage_location}/apps/nextcloud/redis-session.ini:/usr/local/etc/php/conf.d/redis-session.ini
+      - ${central_storage_location}/apps/nextcloud/remoteip.conf:/etc/apache2/conf-enabled/remoteip.conf:ro
+      - ${central_storage_location}/container-backups/nextcloud:/backups
     environment:
       NEXTCLOUD_TRUSTED_DOMAINS: drive.${DOMAIN}
       OVERWRITEPROTOCOL: https
-      APACHE_DISABLE_REWRITE_IP: 1
+      # https://github.com/nextcloud/docker/issues/1494
+      # APACHE_DISABLE_REWRITE_IP: 1
       # trusted proxies only needs declared once during config.php population (set to the reverse proxy IP)
       # TRUSTED_PROXIES: x.x.x.x
       PHP_UPLOAD_LIMIT: 512M
       REDIS_HOST: nextcloud-redis
       POSTGRES_HOST: nextcloud-db
-      POSTGRES_DB_FILE: /run/secrets/nextcloud_pg_name
-      POSTGRES_USER_FILE: /run/secrets/nextcloud_pg_user
-      POSTGRES_PASSWORD_FILE: /run/secrets/nextcloud_pg_pass
-      NEXTCLOUD_ADMIN_PASSWORD_FILE: /run/secrets/nextcloud_admin_password
-      NEXTCLOUD_ADMIN_USER_FILE: /run/secrets/nextcloud_admin_user
+      POSTGRES_DB: nextcloud
+      POSTGRES_USER: ${nextcloud_pg_user}
+      POSTGRES_PASSWORD: ${nextcloud_pg_pass}
+      NEXTCLOUD_ADMIN_PASSWORD: ${nextcloud_admin_password}
+      NEXTCLOUD_ADMIN_USER: ${nextcloud_admin_user}
       NEXTCLOUD_DATADIR: /var/www/html/data
-      # APACHE_RUN_USER: ${NFS_PUID} #k8s user on the shared storage
-      # APACHE_RUN_GROUP: ${NFS_PGID}
     links:
       - nextcloud-db
       - nextcloud-redis
     depends_on:
       - nextcloud-db
       - nextcloud-redis
-    secrets:
-      - nextcloud_admin_password
-      - nextcloud_admin_user
-      - nextcloud_pg_name
-      - nextcloud_pg_pass
-      - nextcloud_pg_user
 
-  # Upgrade postgres database
+  # Upgrade postgres database (database name = nextcloud)
   # pg_dumpall -U ${nextcloud_pg_user} > /backup/dump.sql
-  # psql -U ${nextcloud_pg_user} -f /backup/dump.sql ${nextcloud_pg_name}
+  # psql -U ${nextcloud_pg_user} -f /backup/dump.sql nextcloud
   nextcloud-db:
     image: postgres:16
     container_name: nextcloud-db
     restart: unless-stopped
     privileged: false
     security_opt: [no-new-privileges:true]
+    user: "${remote_storage_user}"
     networks: [internal-nextcloud]
     volumes:
-      - ${nfs_fast_apps}/nextcloud/db:/var/lib/postgresql/data
-      - ${nfsbackup}/nextcloud:/backup
+      - ${central_storage_location}/apps/nextcloud/db:/var/lib/postgresql/data
+      - ${central_storage_location}/container-backups/nextcloud:/backup
     environment:
-      POSTGRES_DB_FILE: /run/secrets/nextcloud_pg_name
-      POSTGRES_USER_FILE: /run/secrets/nextcloud_pg_user
-      POSTGRES_PASSWORD_FILE: /run/secrets/nextcloud_pg_pass
-    secrets:
-      - nextcloud_pg_name
-      - nextcloud_pg_pass
-      - nextcloud_pg_user
+      POSTGRES_DB: nextcloud
+      POSTGRES_USER: ${nextcloud_pg_user}
+      POSTGRES_PASSWORD: ${nextcloud_pg_pass}
+    healthcheck:
+      test: pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB
+      interval: 30s
+      timeout: 20s
+      retries: 3
 
   # WOPI feature check: https://collabora.$DOMAIN/hosting/discovery
   # Admin interface: https://collabora.$DOMAIN/browser/dist/admin/admin.html
