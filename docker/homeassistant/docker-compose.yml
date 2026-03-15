@@ -1,8 +1,4 @@
 ---
-secrets:
-  grafana_admin_password:
-    file: ${nfssecrets}/grafana_admin_password
-
 networks:
   external-home-vlan:
     name: ${home_net_name}
@@ -15,13 +11,13 @@ networks:
           gateway: ${home_net_gateway}
   external-bridge:
     name: external-bridge
-    external: true
   internal-homeassistant:
     name: internal-homeassistant
     internal: true
   internal-iot-vlan:
     name: ${iot_net_name}
     driver: macvlan
+    external: true
     driver_opts:
       parent: vlan${iot_net_vlan}
     ipam:
@@ -40,7 +36,7 @@ services:
     environment:
       TZ: ${TZ}
     volumes:
-      - ${nfs_fast_apps}/homeassistant/app:/config
+      - ${local_apps_location}/homeassistant/app:/config
     networks:
       # external-home-vlan must be first for Apple Homekit to work
       external-home-vlan:
@@ -50,21 +46,18 @@ services:
       internal-homeassistant:
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8123"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
       start_period: 15s
 
   homeassistant-db:
-    image: timescale/timescaledb-ha:pg15
+    image: timescale/timescaledb-ha:pg15.14-ts2.21.3
     container_name: homeassistant-db
     restart: unless-stopped
-    user: ${NFS_PUID}:${NFS_PGID}
+    user: ${apps_user}
     privileged: false
     security_opt: [no-new-privileges:true]
     networks: [internal-homeassistant]
     volumes:
-      - ${nfs_fast_apps}/homeassistant/db:/home/postgres/pgdata
+      - ${local_apps_location}/homeassistant/db:/home/postgres/pgdata
 
   # Port: 1883
   # To add user, in container: mosquitto_passwd -b /mosquitto/config/mqttuser username password
@@ -72,16 +65,13 @@ services:
     image: eclipse-mosquitto:2.0.22
     container_name: homeassistant-mqtt
     restart: unless-stopped
-    # network_mode: "container:homeassistant"
-    # depends_on: [homeassistant]
     networks: [internal-homeassistant]
-    user: ${NFS_PUID}:${NFS_PGID}
     privileged: false
     security_opt: [no-new-privileges:true]
     volumes:
-      - ${nfs_fast_apps}/homeassistant/mqtt/config:/mosquitto/config
-      - ${nfs_fast_apps}/homeassistant/mqtt/data:/mosquitto/data
-      - ${nfs_fast_apps}/homeassistant/mqtt/log:/mosquitto/log
+      - ${local_apps_location}/homeassistant/mqtt/config:/mosquitto/config
+      - ${local_apps_location}/homeassistant/mqtt/data:/mosquitto/data
+      - ${local_apps_location}/homeassistant/mqtt/log:/mosquitto/log
 
   homeassistant-esphome:
     image: ghcr.io/esphome/esphome:2025.9
@@ -101,7 +91,7 @@ services:
       USERNAME: ${ESPHOME_USER}
       PASSWORD: ${ESPHOME_PASSWORD}
     volumes:
-      - ${nfs_fast_apps}/homeassistant/esphome:/config
+      - ${local_apps_location}/homeassistant/esphome:/config
 
   # Port: 8080
   homeassistant-zigbee2mqtt:
@@ -113,13 +103,21 @@ services:
       internal-homeassistant:
       internal-iot-vlan:
         ipv4_address: ${zigbee2mqtt_ip}
-    user: ${NFS_PUID}:${NFS_PGID}
     privileged: false
     security_opt: [no-new-privileges:true]
     environment:
       TZ: ${TZ}
     volumes:
-      - ${nfs_fast_apps}/homeassistant/zigbee2mqtt:/app/data
+      - ${local_apps_location}/homeassistant/zigbee2mqtt:/app/data
+
+  # musicassistant:
+  #   image: ghcr.io/music-assistant/server:2.5.8
+  #   volumes:
+  #     - ${local_apps_location}/homeassistant/musicassistant:/data
+  #   networks:
+  #     external-home-vlan:
+  #       ipv4_address: ${musicassistant_home_ip} # TODO: Create this IP
+  #     internal-homeassistant:
 
   # grafana:
   #   image: grafana/grafana-enterprise:10.2.7
@@ -134,37 +132,5 @@ services:
   #     GF_SECURITY_ADMIN_PASSWORD__FILE: /run/secrets/grafana_admin_password
   #     # GF_SERVER_ROOT_URL: http://my.grafana.server/
   #     # GF_INSTALL_PLUGINS: grafana-clock-panel
-  #   secrets:
-  #     - grafana_admin_password
   #   volumes:
-  #     - ${nfs_fast_apps}/homeassistant/grafana:/var/lib/grafana
-
-  # Port: 1880
-  # homeassistant-node-red:
-  #   image: nodered/node-red:3.1
-  #   container_name: homeassistant-node-red
-  #   restart: unless-stopped
-  #   network_mode: "container:homeassistant"
-  #   user: ${NFS_PUID}:${NFS_PGID}
-  #   privileged: false
-  #   security_opt: [no-new-privileges:true]
-  #   volumes:
-  #     - ${nfs_fast_apps}/homeassistant/nodered:/data
-
-  # Port: 8080
-  # homeassistant-vscode:
-  #   image: codercom/code-server:debian
-  #   container_name: homeassistant-vscode
-  #   restart: unless-stopped
-  #   network_mode: "container:homeassistant"
-  #   user: ${NFS_PUID}:${NFS_PGID}
-  #   privileged: false
-  #   security_opt: [no-new-privileges:true]
-  #   volumes:
-  #     # Set <project dir> to the directory you want to open in VS Code.
-  #     - <project dir>:/home/coder/project
-  #     # <vs code config> should point to a local dir where vs code stores its data.
-  #     - <vs code config dir>:/home/coder/.local/share/code-server
-  #   command: code-server --auth password --disable-telemetry /home/coder/project
-  #   environment:
-  #     PASSWORD: "${VSCODE_PASSWORD}"
+  #     - ${local_apps_location}/homeassistant/grafana:/var/lib/grafana
