@@ -1,0 +1,79 @@
+---
+volumes:
+  media-movies:
+    name: media-movies
+    driver_opts:
+      type: nfs
+      o: addr=${remote_storage_server},nfsvers=4.2,soft,nolock,rw
+      device: ":${remote_slow_location}/media/movies"
+  media-music:
+    name: media-music
+    driver_opts:
+      type: nfs
+      o: addr=${remote_storage_server},nfsvers=4.2,soft,nolock,rw
+      device: ":${remote_slow_location}/media/music"
+  media-tv:
+    name: media-tv
+    driver_opts:
+      type: nfs
+      o: addr=${remote_storage_server},nfsvers=4.2,soft,nolock,rw
+      device: ":${remote_slow_location}/media/tv"
+  plex-transcode:
+    name: plex-transcode
+
+networks:
+  external-bridge:
+    name: external-bridge
+  external-home-vlan:
+    name: ${home_net_name}
+    driver: macvlan
+    driver_opts:
+      parent: vlan${home_net_vlan}
+    ipam:
+      config:
+        - subnet: ${home_net_subnet}
+          gateway: ${home_net_gateway}
+
+services:
+  plex:
+    image: plexinc/pms-docker:1.42.2.10156-f737b826c
+    container_name: plex
+    hostname: plex
+    restart: unless-stopped
+    privileged: false
+    security_opt: [no-new-privileges:true]
+    devices:
+      - /dev/dri/renderD128 # Use Intel iGPU for transcoding
+    networks:
+      external-home-vlan:
+        ipv4_address: ${plex_ip}
+    volumes:
+      - ${local_apps_location}/plex:/config
+      - media-movies:/data/movies
+      - media-music:/data/music
+      - media-tv:/data/tv
+      - plex-transcode:/transcode
+      # TODO: Add container backup location, this is the old location:
+      # - /mnt/cifs/${remote_storage_server}/container-backups/manual/plex-db:/backups
+    environment:
+      TZ: ${TZ}
+
+# For Nvidia GPU support, add these values to their respective sections:
+# services:
+#   plex:
+#     runtime: nvidia
+#     environment:
+#       NVIDIA_VISIBLE_DEVICES: nvidia.com/gpu=0
+
+  plex-stats:
+    image: tautulli/tautulli:latest
+    container_name: tautulli
+    restart: unless-stopped
+    privileged: false
+    security_opt: [no-new-privileges:true]
+    networks: [external-bridge]
+    ports:
+      - 8181:8181
+    volumes:
+      - ${local_apps_location}/plex/tautulli:/config
+      # TODO: Configure backup location to tie into containers /config/backups
