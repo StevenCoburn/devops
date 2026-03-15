@@ -2,7 +2,6 @@
 networks:
   external-bridge:
     name: external-bridge
-    external: true
   internal-mealie:
     name: internal-mealie
     internal: true
@@ -18,14 +17,12 @@ services:
     ports:
       - 9001:9000
     volumes:
-      - ${nfs_fast_apps}/mealie/app:/app/data/
+      - ${local_apps_location}/mealie/app:/app/data/
     environment:
       BASE_URL: https://recipes.${DOMAIN}
       TOKEN_TIME: 4
       MAX_WORKERS: 4
       ALLOW_SIGNUP: false
-      # PUID: ${NFS_PUID}
-      # PGID: ${NFS_PGID}
       TZ: ${TZ}
       WEB_CONCURRENCY: 1
       DB_ENGINE: postgres
@@ -45,13 +42,11 @@ services:
     security_opt: [no-new-privileges:true]
     networks: [internal-mealie]
     volumes:
-      - ${nfs_fast_apps}/mealie/db:/var/lib/postgresql/data
+      - ${local_apps_location}/mealie/db:/var/lib/postgresql/data
     environment:
       POSTGRES_DB: mealie
       POSTGRES_USER: mealie
       POSTGRES_PASSWORD: ${MEALIE_DB_PASSWORD}
     healthcheck:
       test: pg_isready -U $$POSTGRES_USER
-      interval: 30s
-      timeout: 20s
-      retries: 3
+      start_period: 5s

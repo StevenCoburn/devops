@@ -1,24 +1,49 @@
 ---
+networks:
+  external-bridge:
+    name: external-bridge
+  internal-unifi:
+    name: internal-unifi
+    internal: true
+
+volumes:
+  unifi-db-configdb:
+    name: unifi-db-configdb
+
 services:
-  unifi:
-    image: linuxserver/unifi-controller:latest
-    container_name: unifi-controller
-    mem_limit: 3192m
+  unifi-network:
+    image: lscr.io/linuxserver/unifi-network-application:10.0.162-ls111
+    container_name: unifi-network
     restart: unless-stopped
     privileged: false
     security_opt: [no-new-privileges:true]
     volumes:
-      - ${nfs_fast_apps}/unifi:/config
-    network_mode: bridge
+      - ${local_apps_location}/unifi/app:/config
+    networks: [external-bridge, internal-unifi]
     ports:
       - 3478:3478/udp # STUN
       - 8080:8080 # device-to-controller communication
       - 8443:8443 # web ui
     environment:
-      - PUID=${NFS_PUID}
-      - PGID=${NFS_PGID}
+      MEM_LIMIT: 1024
+      MEM_STARTUP: 1024
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
+    depends_on:
+      unifi-db:
+        condition: service_healthy
+
+  # Locked to 4.4.18 to support raspberry pi 4
+  unifi-db:
+    image: mongo:4.4.18
+    container_name: unifi-db
+    restart: unless-stopped
+    privileged: false
+    security_opt: [no-new-privileges:true]
+    volumes:
+      - ${local_apps_location}/unifi/db:/data/db
+      - unifi-db-configdb:/data/configdb
+    networks: [internal-unifi]
+    healthcheck:
+      test: echo 'db.runCommand({serverStatus:1}).ok' | mongo admin --quiet | grep 1
+      start_period: 5s
