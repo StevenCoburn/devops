@@ -1,0 +1,27 @@
+---
+services:  
+  secondary-domain-base:
+    image: oznu/cloudflare-ddns:latest
+    container_name: ddns-${secondary_domain}
+    restart: unless-stopped
+    privileged: false
+    security_opt: [no-new-privileges:true]
+    network_mode: bridge
+    environment:
+      API_KEY: ${secondary_domain_cloudflare_token}
+      ZONE: ${secondary_domain}
+      PROXIED: true
+
+  secondary-domain-vpn:
+    image: favonia/cloudflare-ddns:latest
+    container_name: ddns-${secondary_domain}-vpn
+    restart: unless-stopped
+    privileged: false
+    security_opt: [no-new-privileges:true]
+    network_mode: bridge
+    environment:
+      CLOUDFLARE_API_TOKEN: ${secondary_domain_cloudflare_token}
+      DOMAINS: ${secondary_domain_vpn_endpoint}
+      PROXIED: false
+      IP6_PROVIDER: none
+      QUIET: false
