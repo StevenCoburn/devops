@@ -8,7 +8,7 @@ networks:
 
 services:
   mealie:
-    image: ghcr.io/mealie-recipes/mealie:v3.2.1
+    image: ghcr.io/mealie-recipes/mealie:v3.13.1
     container_name: mealie
     restart: always
     privileged: false

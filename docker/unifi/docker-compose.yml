@@ -12,7 +12,7 @@ volumes:
 
 services:
   unifi-network:
-    image: lscr.io/linuxserver/unifi-network-application:10.0.162-ls111
+    image: lscr.io/linuxserver/unifi-network-application:10.1.89
     container_name: unifi-network
     restart: unless-stopped
     privileged: false
