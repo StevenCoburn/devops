@@ -5,7 +5,7 @@ volumes:
     driver_opts:
       type: nfs
       o: addr=${remote_storage_server},nfsvers=4.2,soft,nolock,rw
-      device: ":${remote_slow_location}/apps/frigate"
+      device: ":${remote_slow_location}/frigate-recordings"
 
 networks:
   internal-iot-vlan:
